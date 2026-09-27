@@ -304,17 +304,15 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
                 </button>
               </form>
 
-              {/* Fast 1-Click Guest Login button (Only on local environment) */}
-              {isLocal && (
-                <div className="mt-5 pt-4 border-t border-slate-100 text-center">
-                  <button
-                    onClick={handleQuickDemoLogin}
-                    className="text-xs font-bold text-[#0a2968] hover:text-[#EF961D] transition-colors inline-flex items-center gap-1.5 bg-blue-50/80 px-4 py-2 rounded-xl border border-blue-100 cursor-pointer"
-                  >
-                    <Sparkles size={14} className="text-[#EF961D]" /> Guest Login & Open Payment Gateway
-                  </button>
-                </div>
-              )}
+              {/* Fast 1-Click Guest Login button */}
+              <div className="mt-5 pt-4 border-t border-slate-100 text-center">
+                <button
+                  onClick={handleQuickDemoLogin}
+                  className="text-xs font-bold text-[#0a2968] hover:text-[#EF961D] transition-colors inline-flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 px-4 py-2 rounded-xl border border-blue-200 cursor-pointer shadow-2xs"
+                >
+                  <Sparkles size={14} className="text-[#EF961D]" /> Guest Login & Open Payment Gateway
+                </button>
+              </div>
             </div>
           )}
 

@@ -54,7 +54,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { getBlogs, addBlog, updateBlog, deleteBlog } from "../utils/blogStorage";
-import { getEvaluations, addEvaluation, updateEvaluation, deleteEvaluation, saveEvaluationResultApi } from "../utils/evaluationStorage";
+import { getEvaluations, addEvaluation, updateEvaluation, deleteEvaluation, saveEvaluationResultApi, getStudentSubmissionsApi } from "../utils/evaluationStorage";
 import { uploadFileToCloudinary } from "../utils/uploadStorage";
 import { getApiUrl } from "../config/api";
 
@@ -108,9 +108,11 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const [evalPurchaseUrl, setEvalPurchaseUrl] = useState("/#contact");
   const [evalPlanPdf, setEvalPlanPdf] = useState("");
   const [evalPlanPdfTitle, setEvalPlanPdfTitle] = useState("Syllabus & Program Overview PDF");
+  const [evalIsDayWiseSchedule, setEvalIsDayWiseSchedule] = useState(false);
+  const [evalTotalDays, setEvalTotalDays] = useState(30);
   const [evalTestsList, setEvalTestsList] = useState([
-    { id: "t1", testTitle: "Test 1: Modern Indian History & Freedom Struggle", questionPdf: "" },
-    { id: "t2", testTitle: "Test 2: Art, Culture & Ancient Literature", questionPdf: "" }
+    { id: "t1", day: 1, testTitle: "Test 1: Modern Indian History & Freedom Struggle", questionPdf: "", textNote: "" },
+    { id: "t2", day: 2, testTitle: "Test 2: Art, Culture & Ancient Literature", questionPdf: "", textNote: "" }
   ]);
   const [evalPublished, setEvalPublished] = useState(true);
   const [isSavingEval, setIsSavingEval] = useState(false);
@@ -118,8 +120,25 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const handleAddTestItem = () => {
     setEvalTestsList(prev => [
       ...prev,
-      { id: `test-${Date.now()}-${prev.length + 1}`, testTitle: `Test ${prev.length + 1}: Mains Question Paper`, questionPdf: "" }
+      { id: `test-${Date.now()}-${prev.length + 1}`, day: prev.length + 1, testTitle: `Test ${prev.length + 1}: Mains Question Paper`, questionPdf: "", textNote: "" }
     ]);
+  };
+
+  const handleGenerate30DaysSchedule = () => {
+    const daysCount = Number(evalTotalDays) || 30;
+    const generated = Array.from({ length: daysCount }, (_, i) => {
+      const dayNum = i + 1;
+      return {
+        id: `day-${Date.now()}-${dayNum}`,
+        day: dayNum,
+        testTitle: `Day ${dayNum}: Mains Question Paper & Daily Practice Task`,
+        questionPdf: "",
+        textNote: `Day ${dayNum} practice test. Upload handwritten scan to unlock Day ${dayNum + 1}.`
+      };
+    });
+    setEvalTestsList(generated);
+    setEvalIsDayWiseSchedule(true);
+    alert(`✅ Generated 30 Days Test Schedule (Day 1 to Day ${daysCount})! You can now edit titles and attach PDFs.`);
   };
 
   const handleUpdateTestItem = (index, field, value) => {
@@ -175,6 +194,15 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   // Student Answer Copy Submissions States
   const [studentSubmissions, setStudentSubmissions] = useState([]);
   const [selectedEvalPlanFilter, setSelectedEvalPlanFilter] = useState("All");
+  const [subFilterStatus, setSubFilterStatus] = useState("All");
+  const [subSearchQuery, setSubSearchQuery] = useState("");
+  const [subSortBy, setSubSortBy] = useState("newest");
+
+  // Upload Loaders States
+  const [isUploadingResPdf, setIsUploadingResPdf] = useState(false);
+  const [uploadingTestPdfIdx, setUploadingTestPdfIdx] = useState(null);
+  const [isUploadingEvalPlanPdf, setIsUploadingEvalPlanPdf] = useState(false);
+  const [isUploadingCoverImg, setIsUploadingCoverImg] = useState(false);
 
   // Dashboard Overview & Student Enrollments Analytics States
   const [purchasesList, setPurchasesList] = useState([]);
@@ -185,14 +213,31 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const [activeStatModal, setActiveStatModal] = useState(null);
   const [studentModalSearch, setStudentModalSearch] = useState("");
 
-  const fetchStudentSubmissions = () => {
+  const fetchStudentSubmissions = async () => {
     try {
-      const savedSubs = JSON.parse(localStorage.getItem("itopper_all_student_submissions") || "[]");
-      if (savedSubs.length === 0) {
-        const demoSubs = [
+      const apiSubs = await getStudentSubmissionsApi();
+      let subsToUse = (Array.isArray(apiSubs) && apiSubs.length > 0) ? apiSubs : JSON.parse(localStorage.getItem("itopper_all_student_submissions") || "[]");
+
+      if (subsToUse.length === 0) {
+        subsToUse = [
+          {
+            planId: "eval-30day-mains",
+            planTitle: "30-Day Mains Answer Writing Challenge & Micro-Test Program",
+            testId: "eval-30day-d1",
+            testName: "Day 1: Mains Question Paper & Micro-Topic Practice",
+            studentName: "Demo Student",
+            studentEmail: "demo@itopper.com",
+            fileName: "DemoStudent_Day1_Mains_Answers.pdf",
+            fileSize: "2.8 MB",
+            uploadedAt: "27 Sep 2026, 10:15 AM",
+            status: "Under Evaluation",
+            fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+          },
           {
             planId: "eval-demo-gs1",
             planTitle: "GS Paper 1 Mains Answer Evaluation",
+            testId: "eval-gs1-t1",
+            testName: "Test 1: Modern Indian History & Freedom Struggle",
             studentName: "Rahul Sharma",
             studentEmail: "rahul.sharma@gmail.com",
             fileName: "Rahul_GS1_AnswerSheet.pdf",
@@ -204,6 +249,8 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
           {
             planId: "eval-demo-psir",
             planTitle: "Optional PSIR Answer Evaluation",
+            testId: "eval-psir-t1",
+            testName: "Test 1: PSIR Paper 1 Section A - Political Theory",
             studentName: "Ananya Roy",
             studentEmail: "ananya.roy@yahoo.com",
             fileName: "Ananya_PSIR_Paper1_Answers.pdf",
@@ -213,11 +260,9 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
             fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
           }
         ];
-        localStorage.setItem("itopper_all_student_submissions", JSON.stringify(demoSubs));
-        setStudentSubmissions(demoSubs);
-      } else {
-        setStudentSubmissions(savedSubs);
+        localStorage.setItem("itopper_all_student_submissions", JSON.stringify(subsToUse));
       }
+      setStudentSubmissions(subsToUse);
     } catch (e) {
       console.error("Error fetching student submissions:", e);
     }
@@ -493,6 +538,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       fetchBlogs();
       fetchEvaluations();
       fetchResults();
+      fetchStudentSubmissions();
     }
   }, [isAuthenticated]);
 
@@ -574,9 +620,11 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
     setEvalPurchaseUrl("/#contact");
     setEvalPlanPdf("");
     setEvalPlanPdfTitle("Program Syllabus & Micro-Topics Overview PDF");
+    setEvalIsDayWiseSchedule(false);
+    setEvalTotalDays(30);
     setEvalTestsList([
-      { id: "t-1", testTitle: "Test 1: Modern Indian History & Freedom Struggle", questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" },
-      { id: "t-2", testTitle: "Test 2: Art, Culture & Ancient Literature", questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" }
+      { id: "t-1", day: 1, testTitle: "Test 1: Modern Indian History & Freedom Struggle", questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", textNote: "" },
+      { id: "t-2", day: 2, testTitle: "Test 2: Art, Culture & Ancient Literature", questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", textNote: "" }
     ]);
     setEvalPublished(true);
     setEditingEval(null);
@@ -593,9 +641,11 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       .filter(t => t.testTitle && t.testTitle.trim() !== '')
       .map((t, idx) => ({
         id: t.id || `test-${Date.now()}-${idx}`,
+        day: Number(t.day || idx + 1),
         testName: t.testTitle.trim(),
         testTitle: t.testTitle.trim(),
-        questionPdf: t.questionPdf ? t.questionPdf.trim() : ""
+        questionPdf: t.questionPdf ? t.questionPdf.trim() : "",
+        textNote: t.textNote ? t.textNote.trim() : ""
       }));
 
     const evalData = {
@@ -611,6 +661,8 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       purchaseUrl: evalPurchaseUrl.trim() || "/#contact",
       planPdf: evalPlanPdf.trim(),
       planPdfTitle: evalPlanPdfTitle.trim() || "Program Syllabus & Micro-Topics Overview PDF",
+      isDayWiseSchedule: evalIsDayWiseSchedule,
+      totalDays: Number(evalTotalDays) || 30,
       published: evalPublished,
       tests: validTests
     };
@@ -740,6 +792,8 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   });
   const uniqueStudentsList = Array.from(uniqueStudentsMap.values());
 
+  const pendingSubmissionsCount = studentSubmissions.filter(s => s.status === 'Under Evaluation' || !s.status).length;
+
   const navMenuItems = [
     {
       id: "dashboard",
@@ -747,6 +801,13 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       icon: BarChart3,
       badge: purchasesList.length > 0 ? `${purchasesList.length}` : null,
       badgeColor: "bg-[#EF961D]/20 text-[#EF961D]"
+    },
+    {
+      id: "submissions",
+      label: "Student Submissions",
+      icon: FileCheck,
+      badge: studentSubmissions.length > 0 ? `${studentSubmissions.length}` : null,
+      badgeColor: pendingSubmissionsCount > 0 ? "bg-amber-500/20 text-amber-300" : "bg-emerald-500/20 text-emerald-300"
     },
     {
       id: "blogs",
@@ -1673,6 +1734,306 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
           </div>
         )}
 
+        {/* ================= TAB 1: STUDENT ANSWER SUBMISSIONS & EVALUATION QUEUE ================= */}
+        {activeAdminTab === "submissions" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-8">
+            {/* Header Title */}
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider mb-2 border border-amber-200">
+                  <Sparkles size={14} className="text-[#EF961D]" /> iTopper Mains Evaluation Desk
+                </div>
+                <h2 className="text-3xl font-black text-[#0a2968]">Student Submissions & Evaluation Queue</h2>
+                <p className="text-sm text-slate-500 font-semibold mt-1">
+                  Sorted & filterable overview of all test answer sheets submitted by students across courses. Upload checked copies directly to update student dashboards.
+                </p>
+              </div>
+
+              <button
+                onClick={fetchStudentSubmissions}
+                className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 text-[#0a2968] hover:bg-slate-50 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer shrink-0"
+              >
+                <RefreshCw size={14} /> Refresh Submissions
+              </button>
+            </div>
+
+            {/* TOP STAT CARDS */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+              <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-extrabold text-slate-400 uppercase tracking-wider block mb-1">
+                    Total Answer Sheets
+                  </span>
+                  <div className="text-3xl font-black text-[#0a2968]">{studentSubmissions.length}</div>
+                  <span className="text-[11px] font-bold text-slate-500 mt-1 block">Submissions Received</span>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#0a2968] flex items-center justify-center shrink-0">
+                  <FileText size={24} />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl border border-amber-200 p-6 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-extrabold text-amber-600 uppercase tracking-wider block mb-1">
+                    Pending Evaluation
+                  </span>
+                  <div className="text-3xl font-black text-amber-600">
+                    {studentSubmissions.filter(s => s.status === 'Under Evaluation' || !s.status).length}
+                  </div>
+                  <span className="text-[11px] font-bold text-amber-700/80 mt-1 block">Needs Faculty Review</span>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                  <Clock size={24} />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-3xl border border-emerald-200 p-6 shadow-sm flex items-center justify-between">
+                <div>
+                  <span className="text-xs font-extrabold text-emerald-600 uppercase tracking-wider block mb-1">
+                    Evaluated / Checked
+                  </span>
+                  <div className="text-3xl font-black text-emerald-600">
+                    {studentSubmissions.filter(s => s.status?.includes('Checked')).length}
+                  </div>
+                  <span className="text-[11px] font-bold text-emerald-700/80 mt-1 block">Evaluated & Published</span>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                  <CheckCircle2 size={24} />
+                </div>
+              </div>
+            </div>
+
+            {/* SEARCH & FILTERS BAR */}
+            <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm space-y-4">
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+                {/* Search Bar */}
+                <div className="relative flex-grow">
+                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type="text"
+                    value={subSearchQuery}
+                    onChange={(e) => setSubSearchQuery(e.target.value)}
+                    placeholder="Search by student name, email, plan title, or test name..."
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-2xl pl-11 pr-4 py-3 text-xs font-semibold text-slate-800 outline-none transition-all"
+                  />
+                  {subSearchQuery && (
+                    <button
+                      onClick={() => setSubSearchQuery("")}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    >
+                      <X size={15} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filter Dropdowns */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Course / Plan Filter */}
+                  <div>
+                    <select
+                      value={selectedEvalPlanFilter}
+                      onChange={(e) => setSelectedEvalPlanFilter(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-[#0a2968] outline-none"
+                    >
+                      <option value="All">All Courses ({studentSubmissions.length})</option>
+                      {Array.from(new Set(studentSubmissions.map(s => s.planTitle))).map((title, idx) => (
+                        <option key={idx} value={title}>
+                          {title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Status Filter */}
+                  <div>
+                    <select
+                      value={subFilterStatus}
+                      onChange={(e) => setSubFilterStatus(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-[#0a2968] outline-none"
+                    >
+                      <option value="All">All Statuses</option>
+                      <option value="Under Evaluation">Under Evaluation (Pending)</option>
+                      <option value="Checked / Evaluated">Checked / Evaluated (Completed)</option>
+                    </select>
+                  </div>
+
+                  {/* Sort By */}
+                  <div>
+                    <select
+                      value={subSortBy}
+                      onChange={(e) => setSubSortBy(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-[#0a2968] outline-none"
+                    >
+                      <option value="newest">Sort: Newest First</option>
+                      <option value="oldest">Sort: Oldest First</option>
+                      <option value="student_name">Sort: Student Name (A-Z)</option>
+                      <option value="plan_title">Sort: Course Plan (A-Z)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SUBMISSIONS TABLE */}
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden p-6 sm:p-8">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 text-[11px] font-black uppercase text-slate-400 tracking-wider">
+                      <th className="py-3.5 px-4">Student Details</th>
+                      <th className="py-3.5 px-4">Course & Test Submitted</th>
+                      <th className="py-3.5 px-4">Answer Sheet PDF</th>
+                      <th className="py-3.5 px-4">Upload Date</th>
+                      <th className="py-3.5 px-4">Evaluation Status</th>
+                      <th className="py-3.5 px-4 text-right">Admin Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
+                    {(() => {
+                      const filtered = studentSubmissions
+                        .filter(sub => {
+                          const matchPlan = selectedEvalPlanFilter === "All" || sub.planTitle === selectedEvalPlanFilter;
+                          const matchStatus = subFilterStatus === "All" ||
+                            (subFilterStatus === "Under Evaluation" && (sub.status === "Under Evaluation" || !sub.status)) ||
+                            (subFilterStatus === "Checked / Evaluated" && sub.status?.includes("Checked"));
+                          const matchQuery = !subSearchQuery.trim() ||
+                            (sub.studentName || "").toLowerCase().includes(subSearchQuery.toLowerCase()) ||
+                            (sub.studentEmail || "").toLowerCase().includes(subSearchQuery.toLowerCase()) ||
+                            (sub.testName || "").toLowerCase().includes(subSearchQuery.toLowerCase()) ||
+                            (sub.planTitle || "").toLowerCase().includes(subSearchQuery.toLowerCase());
+                          return matchPlan && matchStatus && matchQuery;
+                        })
+                        .sort((a, b) => {
+                          if (subSortBy === "oldest") {
+                            return (new Date(a.uploadedAt) || 0) - (new Date(b.uploadedAt) || 0);
+                          }
+                          if (subSortBy === "student_name") {
+                            return (a.studentName || "").localeCompare(b.studentName || "");
+                          }
+                          if (subSortBy === "plan_title") {
+                            return (a.planTitle || "").localeCompare(b.planTitle || "");
+                          }
+                          return 0; // Default newest order preserved
+                        });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="py-12 text-center text-slate-400 font-semibold">
+                              <FileText className="mx-auto mb-2 opacity-40 text-[#0a2968]" size={36} />
+                              No answer copy submissions match your search or filter criteria.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map((sub, sIdx) => {
+                        const pdfUrl = sub.fileUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+                        const isEvaluated = sub.status?.includes("Checked") || sub.status?.includes("Evaluated");
+
+                        return (
+                          <tr key={sIdx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-4 px-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-9 h-9 rounded-xl bg-[#0a2968]/10 text-[#0a2968] font-black text-xs flex items-center justify-center shrink-0 border border-[#0a2968]/20">
+                                  {(sub.studentName || sub.studentEmail || "A")[0].toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="font-black text-slate-900 leading-tight">{sub.studentName}</div>
+                                  <div className="text-[11px] text-slate-500 font-medium">{sub.studentEmail}</div>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4 max-w-[260px]">
+                              <div className="font-extrabold text-[#0a2968] leading-tight mb-0.5">
+                                {sub.planTitle}
+                              </div>
+                              <div className="text-[11px] text-slate-500 font-bold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#EF961D]"></span>
+                                {sub.testName || sub.testTitle || "Mains Practice Test"}
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4">
+                              <div className="flex items-center gap-1.5">
+                                <a
+                                  href={pdfUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-[#0a2968] text-[#0a2968] hover:text-white rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-colors border border-blue-100"
+                                >
+                                  <Eye size={13} /> View Copy
+                                </a>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handlePrintPdf(pdfUrl)}
+                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors border border-slate-200"
+                                  title="Print Answer Sheet"
+                                >
+                                  <Printer size={13} /> Print
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => handleDownloadPdf(pdfUrl, `${sub.studentName}_AnswerSheet`)}
+                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold transition-colors border border-slate-200"
+                                  title="Download PDF"
+                                >
+                                  <Download size={13} />
+                                </button>
+                              </div>
+                            </td>
+
+                            <td className="py-4 px-4 text-slate-500 font-medium">
+                              {sub.uploadedAt}
+                            </td>
+
+                            <td className="py-4 px-4">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border inline-flex items-center gap-1 ${
+                                isEvaluated
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}>
+                                {isEvaluated ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                                {sub.status || "Under Evaluation"}
+                              </span>
+                            </td>
+
+                            <td className="py-4 px-4 text-right">
+                              <button
+                                onClick={() => {
+                                  setResStudentEmail(sub.studentEmail);
+                                  setResPlanTitle(sub.planTitle);
+                                  setResTestName(sub.testName || sub.testTitle || "Test 1");
+                                  setResPaperTag(sub.paperTag || "GS Paper");
+                                  setResScore("124 / 250");
+                                  setResRemarks(`Detailed evaluation notes for ${sub.studentName}'s test...`);
+                                  setResPdfUrl("https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf");
+                                  setResTargetType("personal");
+                                  setShowResultForm(true);
+                                }}
+                                className={`px-3.5 py-2 rounded-xl font-extrabold text-[11px] uppercase tracking-wider shadow-xs transition-all cursor-pointer flex items-center gap-1.5 ml-auto ${
+                                  isEvaluated
+                                    ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'
+                                    : 'bg-[#0a2968] hover:bg-[#EF961D] text-white'
+                                }`}
+                              >
+                                <Award size={14} /> {isEvaluated ? "Edit Checked Copy" : "Submit Checked Copy"}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ================= TAB 1: BLOG ARTICLES MANAGER ================= */}
         {activeAdminTab === "blogs" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -1879,14 +2240,18 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                           setEvalPurchaseUrl(item.purchaseUrl || "/#contact");
                           setEvalPlanPdf(item.planPdf || "");
                           setEvalPlanPdfTitle(item.planPdfTitle || "Program Syllabus & Micro-Topics Overview PDF");
+                          setEvalIsDayWiseSchedule(item.isDayWiseSchedule || false);
+                          setEvalTotalDays(item.totalDays || 30);
                           setEvalTestsList(
                             Array.isArray(item.tests) && item.tests.length > 0
                               ? item.tests.map((t, i) => ({
                                   id: t.id || `test-${i}`,
+                                  day: t.day || i + 1,
                                   testTitle: t.testName || t.testTitle || (typeof t === 'string' ? t : `Test ${i + 1}`),
-                                  questionPdf: t.questionPdf || ""
+                                  questionPdf: t.questionPdf || "",
+                                  textNote: t.textNote || ""
                                 }))
-                              : [{ id: "t-1", testTitle: "Test 1: Mains Question Paper", questionPdf: "" }]
+                              : [{ id: "t-1", day: 1, testTitle: "Test 1: Mains Question Paper", questionPdf: "", textNote: "" }]
                           );
                           setEvalPublished(item.published !== undefined ? item.published : true);
                           setShowEvalForm(true);
@@ -2298,18 +2663,35 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                         placeholder="e.g. https://example.com/syllabus.pdf or /docs/plan.pdf"
                         className="flex-grow bg-white border border-slate-300 focus:border-[#0a2968] rounded-xl px-4 py-2.5 text-slate-800 text-sm font-semibold outline-none"
                       />
-                      <label className="px-4 py-2.5 bg-[#0a2968] text-white hover:bg-[#EF961D] rounded-xl font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors shadow-xs">
-                        <Upload size={15} /> Upload PDF
+                      <label className={`px-4 py-2.5 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors shadow-xs ${isUploadingEvalPlanPdf ? 'opacity-75 pointer-events-none' : ''}`}>
+                        {isUploadingEvalPlanPdf ? (
+                          <>
+                            <Loader2 size={15} className="animate-spin text-[#EF961D]" /> Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={15} /> Upload PDF
+                          </>
+                        )}
                         <input
                           type="file"
                           accept="application/pdf"
+                          disabled={isUploadingEvalPlanPdf}
                           className="hidden"
                           onChange={async (e) => {
                             const file = e.target.files[0];
                             if (file) {
-                              const cloudinaryUrl = await uploadFileToCloudinary(file, 'course_syllabus_pdfs');
-                              setEvalPlanPdf(cloudinaryUrl);
-                              alert(`✅ Syllabus PDF "${file.name}" uploaded to Cloudinary!`);
+                              setIsUploadingEvalPlanPdf(true);
+                              try {
+                                const cloudinaryUrl = await uploadFileToCloudinary(file, 'course_syllabus_pdfs');
+                                setEvalPlanPdf(cloudinaryUrl);
+                                alert(`✅ Syllabus PDF "${file.name}" uploaded to Cloudinary!`);
+                              } catch (err) {
+                                console.error(err);
+                                alert("❌ Upload failed.");
+                              } finally {
+                                setIsUploadingEvalPlanPdf(false);
+                              }
                             }
                           }}
                         />
@@ -2318,15 +2700,71 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   </div>
                 </div>
 
+                {/* 30-DAY DRIP / DAY-WISE SCHEDULE TOGGLE BOX (BRAND THEME COLOR SYSTEM) */}
+                <div className="md:col-span-2 bg-gradient-to-r from-blue-50/90 via-slate-50 to-blue-50/80 border border-blue-200/90 p-5 rounded-2xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={18} className="text-[#EF961D]" />
+                        <h3 className="text-sm font-black text-[#0a2968]">30-Day Day-wise Drip Schedule Mode</h3>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
+                        Enable to release 1 test/PDF daily starting from student purchase date. Day 2 unlocks ONLY after Day 1 submission!
+                      </p>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={evalIsDayWiseSchedule}
+                        onChange={(e) => setEvalIsDayWiseSchedule(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0a2968]"></div>
+                      <span className="ml-3 text-xs font-black text-[#0a2968]">
+                        {evalIsDayWiseSchedule ? "ACTIVE (30 Days Drip)" : "Disabled"}
+                      </span>
+                    </label>
+                  </div>
+
+                  {evalIsDayWiseSchedule && (
+                    <div className="pt-3 border-t border-blue-200/80 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-200">
+                      <div>
+                        <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-1">Total Days in Plan</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="90"
+                          value={evalTotalDays}
+                          onChange={(e) => setEvalTotalDays(e.target.value)}
+                          className="w-full bg-white border border-blue-300 focus:border-[#0a2968] rounded-xl px-4 py-2 text-slate-800 text-xs font-bold outline-none"
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={handleGenerate30DaysSchedule}
+                          className="w-full py-2.5 bg-[#0a2968] hover:bg-[#EF961D] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer uppercase tracking-wider"
+                        >
+                          <Sparkles size={14} className="text-[#EF961D]" /> Auto-Generate {evalTotalDays || 30} Days Schedule
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 {/* DYNAMIC TESTS BUILDER SECTION */}
                 <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-black text-[#0a2968]">
-                        Dynamic Test Series Builder ({evalTestsList.length} Tests)
+                        Dynamic Test Series Builder ({evalTestsList.length} Items / Days)
                       </h3>
                       <p className="text-[11px] text-slate-500 font-semibold">
-                        Add test titles & question PDFs test-by-test. Admin can add more tests anytime later!
+                        {evalIsDayWiseSchedule
+                          ? "Day-wise daily content & question PDFs. User sees Day 1 on purchase date, Day 2 opens after Day 1 submission."
+                          : "Add test titles & question PDFs test-by-test. Admin can add more tests anytime later!"}
                       </p>
                     </div>
                     <button
@@ -2334,40 +2772,62 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                       onClick={handleAddTestItem}
                       className="px-4 py-2 bg-[#0a2968] hover:bg-[#EF961D] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Plus size={15} /> Add New Test
+                      <Plus size={15} /> Add New {evalIsDayWiseSchedule ? "Day" : "Test"}
                     </button>
                   </div>
 
-                  <div className="space-y-3 pt-2">
+                  <div className="space-y-3 pt-2 max-h-[480px] overflow-y-auto pr-1">
                     {evalTestsList.map((testItem, idx) => (
                       <div key={testItem.id || idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-xs font-extrabold text-[#0a2968] bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
-                            Test #{idx + 1}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-extrabold text-[#0a2968] bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
+                              {evalIsDayWiseSchedule ? `Day ${testItem.day || idx + 1}` : `Test #${idx + 1}`}
+                            </span>
+                            {evalIsDayWiseSchedule && (
+                              <span className="text-[10px] font-bold text-slate-400">
+                                Sequential Lock Active
+                              </span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             onClick={() => handleRemoveTestItem(idx)}
                             className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
-                            title="Remove Test"
+                            title="Remove Item"
                           >
                             <Trash2 size={16} />
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          <div>
-                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Test Title</label>
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                          {evalIsDayWiseSchedule && (
+                            <div className="md:col-span-3">
+                              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Day Number</label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={testItem.day || idx + 1}
+                                onChange={(e) => handleUpdateTestItem(idx, 'day', Number(e.target.value))}
+                                className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-bold outline-none"
+                              />
+                            </div>
+                          )}
+
+                          <div className={evalIsDayWiseSchedule ? "md:col-span-9" : "md:col-span-6"}>
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
+                              {evalIsDayWiseSchedule ? "Day Topic / Test Title" : "Test Title"}
+                            </label>
                             <input
                               type="text"
                               value={testItem.testTitle}
                               onChange={(e) => handleUpdateTestItem(idx, 'testTitle', e.target.value)}
-                              placeholder={`e.g. Test ${idx + 1}: Mains Practice Test`}
+                              placeholder={`e.g. Day ${idx + 1}: Mains Question Paper`}
                               className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
                             />
                           </div>
 
-                          <div>
+                          <div className="md:col-span-12">
                             <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Question Paper PDF (Optional)</label>
                             <div className="flex gap-1.5">
                               <input
@@ -2377,24 +2837,59 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                                 placeholder="https://... PDF URL"
                                 className="flex-grow bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
                               />
-                              <label className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#0a2968] border border-slate-300 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer shrink-0">
-                                <Upload size={13} />
-                                <input
-                                  type="file"
-                                  accept="application/pdf"
-                                  className="hidden"
-                                  onChange={async (e) => {
-                                    const file = e.target.files[0];
-                                    if (file) {
-                                      const cloudinaryUrl = await uploadFileToCloudinary(file, 'test_question_pdfs');
-                                      handleUpdateTestItem(idx, 'questionPdf', cloudinaryUrl);
-                                      alert(`✅ Question Paper PDF for Test #${idx + 1} uploaded to Cloudinary!`);
-                                    }
-                                  }}
-                                />
-                              </label>
+                              {(() => {
+                                const isItemUploading = uploadingTestPdfIdx === idx;
+                                return (
+                                  <label className={`px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#0a2968] border border-slate-300 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer shrink-0 transition-all ${isItemUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+                                    {isItemUploading ? (
+                                      <>
+                                        <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Uploading...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Upload size={13} /> Upload
+                                      </>
+                                    )}
+                                    <input
+                                      type="file"
+                                      accept="application/pdf"
+                                      disabled={isItemUploading}
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (file) {
+                                          setUploadingTestPdfIdx(idx);
+                                          try {
+                                            const cloudinaryUrl = await uploadFileToCloudinary(file, 'test_question_pdfs');
+                                            handleUpdateTestItem(idx, 'questionPdf', cloudinaryUrl);
+                                            alert(`✅ Question Paper PDF for Day/Test #${idx + 1} uploaded to Cloudinary!`);
+                                          } catch (err) {
+                                            console.error(err);
+                                            alert("❌ Upload failed.");
+                                          } finally {
+                                            setUploadingTestPdfIdx(null);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                );
+                              })()}
                             </div>
                           </div>
+
+                          {evalIsDayWiseSchedule && (
+                            <div className="md:col-span-12">
+                              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Day Text Note / Instructions (Optional)</label>
+                              <input
+                                type="text"
+                                value={testItem.textNote || ""}
+                                onChange={(e) => handleUpdateTestItem(idx, 'textNote', e.target.value)}
+                                placeholder="Instructions or topic notes for student for this day..."
+                                className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
+                              />
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -2649,18 +3144,35 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                     placeholder="https://example.com/evaluated_copy.pdf"
                     className="flex-grow bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
                   />
-                  <label className="px-4 py-3 bg-[#0a2968] text-white hover:bg-[#EF961D] rounded-xl font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors shadow-xs">
-                    <Upload size={16} /> Select PDF
+                  <label className={`px-4 py-3 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-all shadow-xs ${isUploadingResPdf ? 'opacity-75 pointer-events-none' : ''}`}>
+                    {isUploadingResPdf ? (
+                      <>
+                        <Loader2 size={16} className="animate-spin text-[#EF961D]" /> Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload size={16} /> Select PDF
+                      </>
+                    )}
                     <input
                       type="file"
                       accept="application/pdf"
+                      disabled={isUploadingResPdf}
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files[0];
                         if (file) {
-                          const cloudinaryUrl = await uploadFileToCloudinary(file, 'evaluated_checked_copies');
-                          setResPdfUrl(cloudinaryUrl);
-                          alert(`✅ Evaluated Copy PDF uploaded to Cloudinary!\n${cloudinaryUrl}`);
+                          setIsUploadingResPdf(true);
+                          try {
+                            const cloudinaryUrl = await uploadFileToCloudinary(file, 'evaluated_checked_copies');
+                            setResPdfUrl(cloudinaryUrl);
+                            alert(`✅ Evaluated Copy PDF uploaded to Cloudinary!`);
+                          } catch (err) {
+                            console.error(err);
+                            alert("❌ PDF upload failed.");
+                          } finally {
+                            setIsUploadingResPdf(false);
+                          }
                         }
                       }}
                     />
