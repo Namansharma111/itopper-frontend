@@ -185,15 +185,17 @@ const Login = () => {
             </button>
           </form>
 
-          {/* Quick Demo Login */}
-          <div className="mt-6 pt-5 border-t border-slate-100 text-center">
-            <button
-              onClick={handleQuickDemoLogin}
-              className="text-xs font-bold text-[#0a2968] hover:text-[#EF961D] transition-colors inline-flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 px-4 py-2.5 rounded-xl border border-blue-200 cursor-pointer shadow-2xs"
-            >
-              <Sparkles size={14} className="text-[#EF961D]" /> Instant Demo Student Login (Access All Courses)
-            </button>
-          </div>
+          {/* Quick Demo Login (Only visible on localhost / local dev) */}
+          {isLocalHost && (
+            <div className="mt-6 pt-5 border-t border-slate-100 text-center">
+              <button
+                onClick={handleQuickDemoLogin}
+                className="text-xs font-bold text-[#0a2968] hover:text-[#EF961D] transition-colors inline-flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 px-4 py-2.5 rounded-xl border border-blue-200 cursor-pointer shadow-2xs"
+              >
+                <Sparkles size={14} className="text-[#EF961D]" /> Instant Demo Student Login (Access All Courses)
+              </button>
+            </div>
+          )}
 
           {/* Register Link */}
           <p className="mt-6 text-center text-xs text-slate-500 font-semibold">
