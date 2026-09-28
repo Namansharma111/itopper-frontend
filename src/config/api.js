@@ -8,9 +8,10 @@ const getDefaultApiUrl = () => {
   if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')) {
     return 'http://localhost:5000';
   }
-  // Old Backend URL:
+  // Old Backend URLs:
   // return 'https://itopperbackend.vercel.app';
-  return 'https://itopperbackend-beta.vercel.app';
+  // return 'https://itopperbackend-beta.vercel.app';
+  return 'https://itopper-backend-kq8f.vercel.app';
 };
 
 export const API_BASE_URL = getDefaultApiUrl().replace(/\/+$/, '');
