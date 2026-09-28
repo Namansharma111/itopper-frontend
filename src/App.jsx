@@ -37,6 +37,7 @@ import BlogDetails from "./pages/BlogDetails";
 import BlogsPage from "./pages/BlogsPage";
 import AdminBlogsDashboard from "./pages/AdminBlogsDashboard";
 import EvaluationPage from "./pages/EvaluationPage";
+import DailyMainsPage from "./pages/DailyMainsPage";
 import AdminPortal from "./pages/AdminPortal";
 
 // Payment Pages
@@ -90,6 +91,7 @@ function App() {
     location.pathname === "/forgot-password" ||
     location.pathname === "/blogs" ||
     location.pathname === "/evaluation" ||
+    location.pathname === "/daily-mains-writing" ||
     location.pathname === "/my-courses" ||
     location.pathname.startsWith("/curriculum") ||
     location.pathname.startsWith("/blog/") ||
@@ -152,6 +154,7 @@ function App() {
             <Route path="/programs" element={<Programs />} />
             <Route path="/blogs" element={<BlogsPage />} />
             <Route path="/evaluation" element={<EvaluationPage />} />
+            <Route path="/daily-mains-writing" element={<DailyMainsPage />} />
             <Route path="/curriculum/:subject" element={<CourseCurriculum />} />
             <Route path="/course/:id" element={<CourseDetails2 />} />
 

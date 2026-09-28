@@ -55,6 +55,7 @@ import {
 } from "lucide-react";
 import { getBlogs, addBlog, updateBlog, deleteBlog } from "../utils/blogStorage";
 import { getEvaluations, addEvaluation, updateEvaluation, deleteEvaluation, saveEvaluationResultApi, getStudentSubmissionsApi } from "../utils/evaluationStorage";
+import { getDailyMains, addDailyMains, updateDailyMains, deleteDailyMains } from "../utils/dailyMainsStorage";
 import { uploadFileToCloudinary } from "../utils/uploadStorage";
 import { getApiUrl } from "../config/api";
 
@@ -151,6 +152,140 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
 
   const handleRemoveTestItem = (index) => {
     setEvalTestsList(prev => prev.filter((_, idx) => idx !== index));
+  };
+
+  // Daily Mains Answer Writing States
+  const [dailyMainsList, setDailyMainsList] = useState([]);
+  const [dailyMainsLoading, setDailyMainsLoading] = useState(false);
+  const [showDailyMainsForm, setShowDailyMainsForm] = useState(false);
+  const [editingDailyMains, setEditingDailyMains] = useState(null);
+  const [dmTitle, setDmTitle] = useState("");
+  const [dmCategory, setDmCategory] = useState("Daily Mains");
+  const [dmPaperTag, setDmPaperTag] = useState("30-Day Program");
+  const [dmDescription, setDmDescription] = useState("");
+  const [dmFeatures, setDmFeatures] = useState("");
+  const [dmMrpPrice, setDmMrpPrice] = useState(9999);
+  const [dmFinalPrice, setDmFinalPrice] = useState(5999);
+  const [dmDuration, setDmDuration] = useState("30 Days Program");
+  const [dmBadge, setDmBadge] = useState("30 Days Challenge");
+  const [dmPurchaseUrl, setDmPurchaseUrl] = useState("/daily-mains-writing");
+  const [dmPlanPdf, setDmPlanPdf] = useState("");
+  const [dmPlanPdfTitle, setDmPlanPdfTitle] = useState("30-Day Mains Micro-Topics & Schedule Guide PDF");
+  const [dmIsDayWiseSchedule, setDmIsDayWiseSchedule] = useState(true);
+  const [dmTotalDays, setDmTotalDays] = useState(30);
+  const [dmTestsList, setDmTestsList] = useState(
+    Array.from({ length: 30 }, (_, i) => ({
+      id: `daily-d${i + 1}`,
+      day: i + 1,
+      testTitle: `Day ${i + 1}: Mains Question Paper & Micro-Topic Practice`,
+      questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      textNote: `Daily task for Day ${i + 1}. Write answers on A4 sheet, scan to PDF and upload to unlock Day ${i + 2}.`
+    }))
+  );
+  const [dmPublished, setDmPublished] = useState(true);
+  const [isSavingDailyMains, setIsSavingDailyMains] = useState(false);
+
+  const fetchDailyMains = async () => {
+    setDailyMainsLoading(true);
+    try {
+      const data = await getDailyMains(true);
+      setDailyMainsList(data);
+    } catch (err) {
+      console.error("Failed to load Daily Mains packages:", err);
+    } finally {
+      setDailyMainsLoading(false);
+    }
+  };
+
+  const handleGenerateDm30DaysSchedule = () => {
+    const daysCount = Number(dmTotalDays) || 30;
+    const generated = Array.from({ length: daysCount }, (_, i) => {
+      const dayNum = i + 1;
+      return {
+        id: `dm-day-${Date.now()}-${dayNum}`,
+        day: dayNum,
+        testTitle: `Day ${dayNum}: Mains Question Paper & Daily Practice Task`,
+        questionPdf: "",
+        textNote: `Day ${dayNum} practice test. Upload handwritten scan to unlock Day ${dayNum + 1}.`
+      };
+    });
+    setDmTestsList(generated);
+    setDmIsDayWiseSchedule(true);
+    alert(`✅ Generated ${daysCount} Days Test Schedule! You can now edit titles and attach PDFs.`);
+  };
+
+  const resetDailyMainsForm = () => {
+    setDmTitle("");
+    setDmCategory("Daily Mains");
+    setDmPaperTag("30-Day Program");
+    setDmDescription("");
+    setDmFeatures("");
+    setDmMrpPrice(9999);
+    setDmFinalPrice(5999);
+    setDmDuration("30 Days Program");
+    setDmBadge("30 Days Challenge");
+    setDmPurchaseUrl("/daily-mains-writing");
+    setDmPlanPdf("");
+    setDmPlanPdfTitle("30-Day Mains Micro-Topics & Schedule Guide PDF");
+    setDmIsDayWiseSchedule(true);
+    setDmTotalDays(30);
+    setDmTestsList(
+      Array.from({ length: 30 }, (_, i) => ({
+        id: `daily-d${i + 1}`,
+        day: i + 1,
+        testTitle: `Day ${i + 1}: Mains Question Paper & Micro-Topic Practice`,
+        questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+        textNote: `Daily task for Day ${i + 1}. Write answers on A4 sheet, scan to PDF and upload to unlock Day ${i + 2}.`
+      }))
+    );
+    setDmPublished(true);
+    setEditingDailyMains(null);
+  };
+
+  const handleSaveDailyMains = async () => {
+    if (!dmTitle.trim() || !dmFinalPrice) {
+      alert("Please fill in the package title and price.");
+      return;
+    }
+
+    setIsSavingDailyMains(true);
+    try {
+      const payload = {
+        title: dmTitle.trim(),
+        category: dmCategory.trim() || "Daily Mains",
+        paperTag: dmPaperTag.trim() || "30-Day Program",
+        description: dmDescription.trim(),
+        features: dmFeatures.split('\n').filter(f => f.trim()),
+        mrpPrice: Number(dmMrpPrice) || 0,
+        finalPrice: Number(dmFinalPrice) || 0,
+        duration: dmDuration.trim() || "30 Days Program",
+        badge: dmBadge.trim() || "30 Days Challenge",
+        purchaseUrl: dmPurchaseUrl.trim() || "/daily-mains-writing",
+        planPdf: dmPlanPdf.trim(),
+        planPdfTitle: dmPlanPdfTitle.trim() || "30-Day Mains Micro-Topics & Schedule Guide PDF",
+        isDayWiseSchedule: !!dmIsDayWiseSchedule,
+        totalDays: Number(dmTotalDays) || 30,
+        tests: dmTestsList,
+        published: dmPublished,
+        order: editingDailyMains ? editingDailyMains.order : dailyMainsList.length
+      };
+
+      if (editingDailyMains) {
+        await updateDailyMains(editingDailyMains._id || editingDailyMains.id, payload);
+        alert(`✅ Daily Mains Package "${dmTitle}" updated successfully!`);
+      } else {
+        await addDailyMains(payload);
+        alert(`✅ Daily Mains Package "${dmTitle}" published successfully!`);
+      }
+
+      setShowDailyMainsForm(false);
+      resetDailyMainsForm();
+      fetchDailyMains();
+    } catch (err) {
+      console.error("Save Daily Mains error:", err);
+    } finally {
+      setIsSavingDailyMains(false);
+    }
   };
 
   // Evaluation Results States (For Student Dashboard Results Tab)
@@ -452,6 +587,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       fetchDashboardAnalytics();
       fetchBlogs();
       fetchEvaluations();
+      fetchDailyMains();
       fetchResults();
       fetchStudentSubmissions();
     }
@@ -822,6 +958,13 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       icon: Layers,
       badge: evaluations.length > 0 ? `${evaluations.length}` : null,
       badgeColor: "bg-purple-500/20 text-purple-300"
+    },
+    {
+      id: "daily_mains",
+      label: "Daily Mains Writing",
+      icon: Sparkles,
+      badge: dailyMainsList.length > 0 ? `${dailyMainsList.length}` : null,
+      badgeColor: "bg-amber-500/20 text-amber-300"
     },
     {
       id: "results",
@@ -2366,8 +2509,157 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
             )}
           </div>
         )}
+
+        {/* ================= TAB 4: DAILY MAINS WRITING MANAGER ================= */}
+        {activeAdminTab === "daily_mains" && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-10">
+              <div>
+                <h2 className="text-3xl font-black text-[#0a2968]">Daily Mains Answer Writing Packages</h2>
+                <p className="text-sm text-slate-500 font-semibold mt-1">
+                  Manage 30-Day Drip Challenge packages & day-wise micro-topic schedules for students
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  resetDailyMainsForm();
+                  setShowDailyMainsForm(true);
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-[#0a2968] text-white hover:bg-[#EF961D] rounded-full font-bold shadow-md hover:shadow-lg transition-all cursor-pointer"
+              >
+                <Plus size={20} /> Create Daily Mains Package
+              </button>
+            </div>
+
+            {dailyMainsLoading ? (
+              <div className="p-20 flex justify-center">
+                <Loader2 className="animate-spin text-[#EF961D] w-8 h-8" />
+              </div>
+            ) : dailyMainsList.length === 0 ? (
+              <div className="p-20 text-center text-slate-500 bg-white border border-slate-200 border-dashed rounded-3xl shadow-sm">
+                No Daily Mains packages found. Click "Create Daily Mains Package" to create one.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                {dailyMainsList.map((item, index) => (
+                  <div
+                    key={item._id || item.id || index}
+                    className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden p-6 relative"
+                  >
+                    {/* Badge */}
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="px-3 py-1 bg-amber-50 text-amber-700 font-black text-xs rounded-lg uppercase tracking-wider border border-amber-200">
+                        {item.category || "Daily Mains"} • {item.paperTag || "30-Day Program"}
+                      </span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${item.published ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
+                        {item.published ? "Active" : "Hidden"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <h3 className="text-xl font-extrabold text-[#0a2968] mb-2 leading-tight">
+                        {item.title}
+                      </h3>
+                      <p className="text-xs text-slate-500 font-semibold line-clamp-2 mb-4">
+                        {item.description}
+                      </p>
+
+                      {/* Pricing */}
+                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 mb-4 flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-[#0a2968]">
+                          ₹{item.finalPrice?.toLocaleString("en-IN")}
+                        </span>
+                        {item.mrpPrice > item.finalPrice && (
+                          <span className="text-xs font-bold text-slate-400 line-through">
+                            ₹{item.mrpPrice?.toLocaleString("en-IN")}
+                          </span>
+                        )}
+                        <span className="text-[11px] text-amber-600 font-extrabold ml-auto">{item.duration || "30 Days"}</span>
+                      </div>
+
+                      {/* Features Preview */}
+                      <div className="space-y-1.5 mb-6">
+                        {item.features && item.features.slice(0, 3).map((f, fIdx) => (
+                          <div key={fIdx} className="flex items-center gap-2 text-xs font-bold text-slate-700 truncate">
+                            <CheckCircle2 size={14} className="text-[#EF961D] shrink-0" />
+                            <span className="truncate">{f}</span>
+                          </div>
+                        ))}
+                        {item.features && item.features.length > 3 && (
+                          <span className="text-[11px] font-bold text-slate-400 pl-5">+ {item.features.length - 3} more features</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Action Bar */}
+                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                      <button
+                        onClick={() => {
+                          setEditingDailyMains(item);
+                          setDmTitle(item.title);
+                          setDmCategory(item.category || "Daily Mains");
+                          setDmPaperTag(item.paperTag || "30-Day Program");
+                          setDmDescription(item.description || "");
+                          setDmFeatures(Array.isArray(item.features) ? item.features.join("\n") : "");
+                          setDmMrpPrice(item.mrpPrice || 9999);
+                          setDmFinalPrice(item.finalPrice || 5999);
+                          setDmDuration(item.duration || "30 Days Program");
+                          setDmBadge(item.badge || "30 Days Challenge");
+                          setDmPurchaseUrl(item.purchaseUrl || "/daily-mains-writing");
+                          setDmPlanPdf(item.planPdf || "");
+                          setDmPlanPdfTitle(item.planPdfTitle || "30-Day Mains Micro-Topics & Schedule Guide PDF");
+                          setDmIsDayWiseSchedule(item.isDayWiseSchedule !== undefined ? item.isDayWiseSchedule : true);
+                          setDmTotalDays(item.totalDays || 30);
+                          setDmTestsList(
+                            Array.isArray(item.tests) && item.tests.length > 0
+                              ? item.tests.map((t, i) => ({
+                                  id: t.id || `dm-test-${i}`,
+                                  day: t.day || i + 1,
+                                  testTitle: t.testName || t.testTitle || `Day ${i + 1}: Mains Question Paper`,
+                                  questionPdf: t.questionPdf || "",
+                                  textNote: t.textNote || ""
+                                }))
+                              : Array.from({ length: 30 }, (_, i) => ({
+                                  id: `daily-d${i + 1}`,
+                                  day: i + 1,
+                                  testTitle: `Day ${i + 1}: Mains Question Paper & Micro-Topic Practice`,
+                                  questionPdf: "",
+                                  textNote: ""
+                                }))
+                          );
+                          setDmPublished(item.published !== undefined ? item.published : true);
+                          setShowDailyMainsForm(true);
+                        }}
+                        className="px-4 py-2 bg-amber-50 hover:bg-[#0a2968] hover:text-white rounded-xl text-xs font-extrabold text-[#0a2968] transition-colors flex items-center gap-1.5 cursor-pointer border border-amber-100"
+                      >
+                        <Edit2 size={14} /> Edit Package
+                      </button>
+
+                      <button
+                        onClick={async () => {
+                          const dmId = item._id || item.id;
+                          if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
+                            try {
+                              await deleteDailyMains(dmId);
+                              fetchDailyMains();
+                            } catch (err) {
+                              alert("Failed to delete Daily Mains package.");
+                            }
+                          }
+                        }}
+                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
+                        title="Delete Package"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
-    </div>
 
     {/* BLOG FORM SLIDE OVER */}
       {showBlogForm && (
@@ -3198,7 +3490,438 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
           </div>
         </div>
       )}
+
+      {/* DAILY MAINS PACKAGE FORM SLIDE OVER */}
+      {showDailyMainsForm && (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowDailyMainsForm(false)} />
+          <div className="relative w-full max-w-4xl bg-white h-full shadow-2xl overflow-y-auto border-l border-slate-200 animate-in slide-in-from-right duration-300 flex flex-col">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex justify-between items-center z-20 shadow-sm">
+              <h2 className="text-2xl font-black text-[#0a2968] flex items-center gap-2">
+                <Sparkles className="text-[#EF961D]" size={24} />
+                {editingDailyMains ? "Edit Daily Mains Writing Package" : "Create New Daily Mains Writing Package"}
+              </h2>
+              <button onClick={() => setShowDailyMainsForm(false)} className="p-2 bg-slate-100 hover:bg-slate-200 rounded-full text-slate-700 cursor-pointer">
+                <X size={22} />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6 flex-grow">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Package Title</label>
+                  <input
+                    type="text"
+                    value={dmTitle}
+                    onChange={(e) => setDmTitle(e.target.value)}
+                    placeholder="e.g. 30-Day Mains Answer Writing Challenge"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Paper Tag / Program Type</label>
+                  <input
+                    type="text"
+                    value={dmPaperTag}
+                    onChange={(e) => setDmPaperTag(e.target.value)}
+                    placeholder="e.g. 30-Day Program or GS 1-4 Daily"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Package Description</label>
+                  <textarea
+                    value={dmDescription}
+                    onChange={(e) => setDmDescription(e.target.value)}
+                    placeholder="Comprehensive 30 days micro-topic schedule with 1-on-1 copy evaluation..."
+                    rows={3}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Key Features (One feature per line)</label>
+                  <textarea
+                    value={dmFeatures}
+                    onChange={(e) => setDmFeatures(e.target.value)}
+                    placeholder="Daily 2 Questions & Model Answer Key&#10;Line-by-Line Copy Evaluation within 24 Hours&#10;Personal Mentor Call & Marks Analytics"
+                    rows={4}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none font-mono text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">MRP Price (₹)</label>
+                  <input
+                    type="number"
+                    value={dmMrpPrice}
+                    onChange={(e) => setDmMrpPrice(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Discounted Offer Price (₹)</label>
+                  <input
+                    type="number"
+                    value={dmFinalPrice}
+                    onChange={(e) => setDmFinalPrice(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Program Duration Tag</label>
+                  <input
+                    type="text"
+                    value={dmDuration}
+                    onChange={(e) => setDmDuration(e.target.value)}
+                    placeholder="30 Days Program"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Card Badge Highlight</label>
+                  <input
+                    type="text"
+                    value={dmBadge}
+                    onChange={(e) => setDmBadge(e.target.value)}
+                    placeholder="30 Days Challenge"
+                    className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl px-4 py-3 text-slate-800 text-sm font-semibold outline-none"
+                  />
+                </div>
+
+                {/* SYLLABUS PDF UPLOADER */}
+                <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-3">
+                  <h3 className="text-xs font-black text-[#0a2968] uppercase tracking-wider">
+                    Syllabus & Schedule Overview PDF
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      type="text"
+                      value={dmPlanPdfTitle}
+                      onChange={(e) => setDmPlanPdfTitle(e.target.value)}
+                      placeholder="30-Day Mains Micro-Topics & Schedule Guide PDF"
+                      className="bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none"
+                    />
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={dmPlanPdf}
+                        onChange={(e) => setDmPlanPdf(e.target.value)}
+                        placeholder="https://... PDF URL"
+                        className="flex-grow bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-800 outline-none"
+                      />
+                      <label className={`px-4 py-2.5 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors shadow-xs ${isUploadingEvalPlanPdf ? 'opacity-75 pointer-events-none' : ''}`}>
+                        {isUploadingEvalPlanPdf ? (
+                          <>
+                            <Loader2 size={15} className="animate-spin text-[#EF961D]" /> Uploading...
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={15} /> Upload PDF
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          disabled={isUploadingEvalPlanPdf}
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              setIsUploadingEvalPlanPdf(true);
+                              try {
+                                const cloudinaryUrl = await uploadFileToCloudinary(file, 'daily_mains_syllabus_pdfs');
+                                setDmPlanPdf(cloudinaryUrl);
+                                alert(`✅ Schedule PDF "${file.name}" uploaded to Cloudinary!`);
+                              } catch (err) {
+                                console.error(err);
+                                alert("❌ Upload failed.");
+                              } finally {
+                                setIsUploadingEvalPlanPdf(false);
+                              }
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 30-DAY DRIP TOGGLE & AUTO-GENERATE BUTTON */}
+                <div className="md:col-span-2 bg-gradient-to-r from-amber-50/90 via-amber-50/40 to-amber-50/90 border border-amber-200/90 p-5 rounded-2xl space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Sparkles size={18} className="text-[#EF961D]" />
+                        <h3 className="text-sm font-black text-[#0a2968]">30-Day Day-wise Drip Schedule Mode</h3>
+                      </div>
+                      <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
+                        Release 1 test/PDF daily starting from student purchase date. Day 2 unlocks ONLY after Day 1 submission!
+                      </p>
+                    </div>
+
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={dmIsDayWiseSchedule}
+                        onChange={(e) => setDmIsDayWiseSchedule(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0a2968]"></div>
+                      <span className="ml-3 text-xs font-black text-[#0a2968]">
+                        {dmIsDayWiseSchedule ? "ACTIVE (Day-Wise Drip)" : "Disabled"}
+                      </span>
+                    </label>
+                  </div>
+
+                  {dmIsDayWiseSchedule && (
+                    <div className="pt-3 border-t border-amber-200/80 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-200">
+                      <div>
+                        <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-1">Total Days in Challenge</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="90"
+                          value={dmTotalDays}
+                          onChange={(e) => setDmTotalDays(e.target.value)}
+                          className="w-full bg-white border border-amber-300 focus:border-[#0a2968] rounded-xl px-4 py-2 text-slate-800 text-xs font-bold outline-none"
+                        />
+                      </div>
+
+                      <div className="flex items-end">
+                        <button
+                          type="button"
+                          onClick={handleGenerateDm30DaysSchedule}
+                          className="w-full py-2.5 bg-[#0a2968] hover:bg-[#EF961D] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer uppercase tracking-wider"
+                        >
+                          <Sparkles size={14} className="text-[#EF961D]" /> Auto-Generate {dmTotalDays || 30} Days Schedule
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* DAY-WISE TESTS BUILDER SECTION */}
+                <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-black text-[#0a2968]">
+                        Daily Practice Tasks & Questions ({dmTestsList.length} Days)
+                      </h3>
+                      <p className="text-[11px] text-slate-500 font-semibold">
+                        Configure daily practice topics, instructions, and question PDFs.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDmTestsList(prev => [
+                          ...prev,
+                          {
+                            id: `dm-day-${Date.now()}-${prev.length + 1}`,
+                            day: prev.length + 1,
+                            testTitle: `Day ${prev.length + 1}: Mains Practice Question`,
+                            questionPdf: "",
+                            textNote: ""
+                          }
+                        ]);
+                      }}
+                      className="px-4 py-2 bg-[#0a2968] hover:bg-[#EF961D] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus size={15} /> Add Day
+                    </button>
+                  </div>
+
+                  <div className="space-y-3 pt-2 max-h-[480px] overflow-y-auto pr-1">
+                    {dmTestsList.map((testItem, idx) => (
+                      <div key={testItem.id || idx} className="bg-white p-4 rounded-xl border border-slate-200 shadow-2xs space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-extrabold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200">
+                              Day {testItem.day || idx + 1}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              Sequential Unlock Lock
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setDmTestsList(prev => prev.filter((_, i) => i !== idx))}
+                            className="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                            title="Remove Day"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                          <div className="md:col-span-3">
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Day No.</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={testItem.day || idx + 1}
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                setDmTestsList(prev => {
+                                  const updated = [...prev];
+                                  updated[idx] = { ...updated[idx], day: val };
+                                  return updated;
+                                });
+                              }}
+                              className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-bold outline-none"
+                            />
+                          </div>
+
+                          <div className="md:col-span-9">
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Day Topic Title</label>
+                            <input
+                              type="text"
+                              value={testItem.testTitle}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDmTestsList(prev => {
+                                  const updated = [...prev];
+                                  updated[idx] = { ...updated[idx], testTitle: val };
+                                  return updated;
+                                });
+                              }}
+                              placeholder={`Day ${idx + 1}: Modern Indian History & Daily Practice Task`}
+                              className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
+                            />
+                          </div>
+
+                          <div className="md:col-span-12">
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Question Paper PDF (Optional)</label>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                value={testItem.questionPdf}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setDmTestsList(prev => {
+                                    const updated = [...prev];
+                                    updated[idx] = { ...updated[idx], questionPdf: val };
+                                    return updated;
+                                  });
+                                }}
+                                placeholder="https://... PDF URL"
+                                className="flex-grow bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
+                              />
+                              {(() => {
+                                const isItemUploading = uploadingTestPdfIdx === idx;
+                                return (
+                                  <label className={`px-3 py-2 bg-slate-100 hover:bg-slate-200 text-[#0a2968] border border-slate-300 rounded-lg font-bold text-[11px] flex items-center gap-1 cursor-pointer shrink-0 transition-all ${isItemUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+                                    {isItemUploading ? (
+                                      <>
+                                        <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Uploading...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Upload size={13} /> Upload
+                                      </>
+                                    )}
+                                    <input
+                                      type="file"
+                                      accept="application/pdf"
+                                      disabled={isItemUploading}
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files[0];
+                                        if (file) {
+                                          setUploadingTestPdfIdx(idx);
+                                          try {
+                                            const cloudinaryUrl = await uploadFileToCloudinary(file, 'daily_mains_question_pdfs');
+                                            setDmTestsList(prev => {
+                                              const updated = [...prev];
+                                              updated[idx] = { ...updated[idx], questionPdf: cloudinaryUrl };
+                                              return updated;
+                                            });
+                                            alert(`✅ Question PDF for Day #${idx + 1} uploaded to Cloudinary!`);
+                                          } catch (err) {
+                                            console.error(err);
+                                            alert("❌ Upload failed.");
+                                          } finally {
+                                            setUploadingTestPdfIdx(null);
+                                          }
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                );
+                              })()}
+                            </div>
+                          </div>
+
+                          <div className="md:col-span-12">
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Day Text Note / Instructions</label>
+                            <input
+                              type="text"
+                              value={testItem.textNote || ""}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setDmTestsList(prev => {
+                                  const updated = [...prev];
+                                  updated[idx] = { ...updated[idx], textNote: val };
+                                  return updated;
+                                });
+                              }}
+                              placeholder="Instructions or practice tips for this day..."
+                              className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-4">
+                  <input
+                    type="checkbox"
+                    id="dmPublishedCheck"
+                    checked={dmPublished}
+                    onChange={(e) => setDmPublished(e.target.checked)}
+                    className="w-5 h-5 text-[#0a2968] rounded"
+                  />
+                  <label htmlFor="dmPublishedCheck" className="text-sm font-bold text-slate-700 cursor-pointer">
+                    Show Package on Website
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                  onClick={() => setShowDailyMainsForm(false)}
+                  className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl text-sm cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveDailyMains}
+                  disabled={isSavingDailyMains}
+                  className="px-8 py-3 bg-[#0a2968] hover:bg-[#EF961D] text-white font-extrabold rounded-xl text-sm shadow-md transition-all cursor-pointer uppercase tracking-wider flex items-center gap-2"
+                >
+                  {isSavingDailyMains ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin text-[#EF961D]" /> Saving...
+                    </>
+                  ) : (
+                    "Save Daily Mains Package"
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  </div>
   );
 };
 

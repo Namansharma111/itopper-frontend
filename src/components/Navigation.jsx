@@ -45,7 +45,7 @@ const Navbar = ({ theme }) => {
       isDropdown: true,
       href: "/#courses?tab=mains",
       subItems: [
-        { name: "Daily Mains Answer Writing", href: "/#courses?tab=mains" },
+        { name: "Daily Mains Answer Writing", href: "/daily-mains-writing" },
         { name: "Answer Writing with Test Series", href: "/#courses?tab=mains" },
         { name: "Answer Evaluation", href: "/evaluation" }
       ]

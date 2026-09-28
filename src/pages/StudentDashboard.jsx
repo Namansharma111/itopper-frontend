@@ -11,6 +11,7 @@ import {
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import { getEvaluations, DEFAULT_EVALUATIONS, getEvaluationResultsApi, submitAnswerSheetApi } from '../utils/evaluationStorage';
+import { getDailyMains } from '../utils/dailyMainsStorage';
 import { uploadFileToCloudinary } from '../utils/uploadStorage';
 
 const StudentDashboard = () => {
@@ -52,7 +53,9 @@ const StudentDashboard = () => {
 
       if (isDemoUser) {
         // ALWAYS load all available courses for Demo Account so all plans & 30-day tests can be tested
-        const allPlans = await getEvaluations(true);
+        const allEvals = await getEvaluations(true);
+        const allDailyMains = await getDailyMains(true);
+        const allPlans = [...allEvals, ...allDailyMains];
         const demoEvals = allPlans.map((p, idx) => ({
           ...p,
           purchasedAt: p.purchasedAt || new Date(Date.now() - 3600000 * 24 * (idx % 2)).toISOString(),
