@@ -24,7 +24,7 @@ const PopupModal = () => {
 
   const handleImageClick = () => {
     setIsOpen(false);
-    navigate("/programs");
+    navigate("/daily-mains-writing");
   };
 
   if (!isOpen) return null;
