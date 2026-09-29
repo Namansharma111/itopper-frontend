@@ -27,7 +27,7 @@ const DailyMainsPage = () => {
   const [dailyMainsPlans, setDailyMainsPlans] = useState(DEFAULT_DAILY_MAINS);
   const [loading, setLoading] = useState(true);
   const [activeCategoryTab, setActiveCategoryTab] = useState("All");
-  
+
   // Checkout Modal State
   const [selectedPlanForCheckout, setSelectedPlanForCheckout] = useState(null);
   const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
@@ -81,11 +81,11 @@ const DailyMainsPage = () => {
           </div>
 
           <div className="max-w-6xl mx-auto text-center relative z-10 space-y-6">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[#EF961D] text-xs font-black uppercase tracking-wider">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[#EF961D] text-xs font-semibold uppercase tracking-wider">
               <Sparkles size={14} /> Daily Mains Answer Writing & Drip Unlock Program
             </div>
 
-            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight max-w-4xl mx-auto">
+            <h1 className="text-3xl sm:text-5xl lg:text-6xl font-semibold tracking-tight leading-tight max-w-4xl mx-auto">
               Master UPSC Mains Answer Writing <br className="hidden sm:inline" />
               <span className="text-[#EF961D]">Day-by-Day with Daily Evaluation</span>
             </h1>
@@ -95,7 +95,7 @@ const DailyMainsPage = () => {
             </p>
 
             {/* Feature Highlights Pill Grid */}
-            <div className="pt-4 flex flex-wrap justify-center gap-3 sm:gap-6 text-xs sm:text-sm font-bold text-slate-200">
+            <div className="pt-4 flex flex-wrap justify-center gap-3 sm:gap-6 text-xs sm:text-sm font-semibold text-slate-200">
               <span className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl border border-white/10">
                 <CheckCircle2 size={16} className="text-[#EF961D]" /> Daily 1 Question Paper PDF
               </span>
@@ -112,77 +112,15 @@ const DailyMainsPage = () => {
           </div>
         </section>
 
-        {/* ================= 2. HOW DAILY MAINS DRIP WORKS SECTION ================= */}
-        <section className="py-16 px-4 sm:px-6 bg-slate-50 border-b border-slate-200/80">
-          <div className="max-w-6xl mx-auto space-y-12">
-            <div className="text-center space-y-3">
-              <span className="px-3.5 py-1 bg-amber-50 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider border border-amber-200">
-                Workflow Mechanism
-              </span>
-              <h2 className="text-2xl sm:text-4xl font-black text-[#0a2968] tracking-tight">
-                How Daily Mains Drip Unlock Works
-              </h2>
-              <p className="text-sm text-slate-500 font-semibold max-w-2xl mx-auto">
-                Designed to instill discipline & consistency. You cannot skip days or accumulate backlogs.
-              </p>
-            </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              {/* Step 1 */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
-                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#0a2968] font-black text-lg flex items-center justify-center border border-blue-100 shadow-2xs">
-                  01
-                </div>
-                <h3 className="text-base font-black text-[#0a2968]">Day 1 Release on Purchase</h3>
-                <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  As soon as you enroll, Day 1 question paper PDF and micro-topic guidance unlock immediately on your dashboard.
-                </p>
-              </div>
-
-              {/* Step 2 */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
-                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 font-black text-lg flex items-center justify-center border border-amber-200 shadow-2xs">
-                  02
-                </div>
-                <h3 className="text-base font-black text-[#0a2968]">Write & Upload Answer PDF</h3>
-                <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Write your answer on A4 sheets under exam conditions, scan to PDF and upload directly under Day 1 on your student portal.
-                </p>
-              </div>
-
-              {/* Step 3 */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
-                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 font-black text-lg flex items-center justify-center border border-purple-200 shadow-2xs">
-                  03
-                </div>
-                <h3 className="text-base font-black text-[#0a2968]">Sequential Unlock of Next Day</h3>
-                <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Submitting Day 1 unlocks Day 2 (provided calendar date has reached Day 2 from purchase date). Zero backlogs possible!
-                </p>
-              </div>
-
-              {/* Step 4 */}
-              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 font-black text-lg flex items-center justify-center border border-emerald-200 shadow-2xs">
-                  04
-                </div>
-                <h3 className="text-base font-black text-[#0a2968]">24h Expert Evaluation</h3>
-                <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                  Faculty evaluates your copy line-by-line, provides marks & structural remarks, and uploads your checked PDF to your dashboard.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ================= 3. DAILY MAINS PACKAGES GRID ================= */}
+        {/* ================= 2. DAILY MAINS PACKAGES GRID ================= */}
         <section id="packages" className="py-20 px-4 sm:px-6">
           <div className="max-w-6xl mx-auto space-y-12">
             <div className="text-center space-y-4">
-              <span className="px-3.5 py-1 bg-blue-50 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider border border-blue-200">
+              <span className="px-3.5 py-1 bg-blue-50 text-[#0a2968] font-semibold text-xs rounded-lg uppercase tracking-wider border border-blue-200">
                 Official Packages & Challenges
               </span>
-              <h2 className="text-3xl sm:text-5xl font-black text-[#0a2968] tracking-tight">
+              <h2 className="text-3xl sm:text-5xl font-semibold text-[#0a2968] tracking-tight">
                 Select Your Daily Mains Writing Program
               </h2>
               <p className="text-sm sm:text-base text-slate-500 font-semibold max-w-2xl mx-auto">
@@ -195,11 +133,10 @@ const DailyMainsPage = () => {
                   <button
                     key={tab}
                     onClick={() => setActiveCategoryTab(tab)}
-                    className={`px-5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
-                      activeCategoryTab === tab
-                        ? "bg-[#0a2968] text-white shadow-md"
-                        : "text-slate-600 hover:text-slate-900"
-                    }`}
+                    className={`px-5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${activeCategoryTab === tab
+                      ? "bg-[#0a2968] text-white shadow-md"
+                      : "text-slate-600 hover:text-slate-900"
+                      }`}
                   >
                     {tab === "All" ? "All Programs" : `${tab} Challenges`}
                   </button>
@@ -208,11 +145,11 @@ const DailyMainsPage = () => {
             </div>
 
             {loading ? (
-              <div className="py-20 text-center text-slate-400 font-bold">
+              <div className="py-20 text-center text-slate-400 font-semibold">
                 Loading Daily Mains Programs...
               </div>
             ) : filteredPlans.length === 0 ? (
-              <div className="py-20 text-center text-slate-400 font-bold bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+              <div className="py-20 text-center text-slate-400 font-semibold bg-slate-50 rounded-3xl border border-dashed border-slate-200">
                 No Daily Mains Answer Writing programs found in this category.
               </div>
             ) : (
@@ -229,7 +166,7 @@ const DailyMainsPage = () => {
                     >
                       {/* Top Badge */}
                       {plan.badge && (
-                        <div className="absolute top-5 right-5 px-3 py-1 bg-[#EF961D] text-white text-[10px] font-black uppercase tracking-wider rounded-full shadow-xs">
+                        <div className="absolute top-5 right-5 px-3 py-1 bg-[#EF961D] text-white text-[10px] font-semibold uppercase tracking-wider rounded-full shadow-xs">
                           {plan.badge}
                         </div>
                       )}
@@ -237,10 +174,10 @@ const DailyMainsPage = () => {
                       <div className="space-y-6">
                         {/* Header info */}
                         <div>
-                          <span className="px-2.5 py-1 bg-blue-50 text-[#0a2968] font-extrabold text-[11px] rounded-md uppercase tracking-wider border border-blue-100 inline-block mb-3">
+                          <span className="px-2.5 py-1 bg-blue-50 text-[#0a2968] font-semibold text-[11px] rounded-md uppercase tracking-wider border border-blue-100 inline-block mb-3">
                             {plan.paperTag || "30-Day Program"}
                           </span>
-                          <h3 className="text-xl sm:text-2xl font-black text-[#0a2968] leading-snug group-hover:text-[#0a2968]">
+                          <h3 className="text-xl sm:text-2xl font-semibold text-[#0a2968] leading-snug group-hover:text-[#0a2968]">
                             {plan.title}
                           </h3>
                           <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
@@ -251,15 +188,15 @@ const DailyMainsPage = () => {
                         {/* Price Banner */}
                         <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
                           <div>
-                            <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wider">
+                            <span className="text-[10px] font-semibold uppercase text-slate-400 block tracking-wider">
                               Special Program Fee
                             </span>
                             <div className="flex items-baseline gap-2 mt-0.5">
-                              <span className="text-2xl sm:text-3xl font-black text-[#0a2968]">
+                              <span className="text-2xl sm:text-3xl font-semibold text-[#0a2968]">
                                 ₹{price.toLocaleString("en-IN")}
                               </span>
                               {mrp > price && (
-                                <span className="text-xs font-bold text-slate-400 line-through">
+                                <span className="text-xs font-medium text-slate-400 line-through">
                                   ₹{mrp.toLocaleString("en-IN")}
                                 </span>
                               )}
@@ -267,7 +204,7 @@ const DailyMainsPage = () => {
                           </div>
 
                           {mrp > price && (
-                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-black text-xs rounded-lg uppercase">
+                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-semibold text-xs rounded-lg uppercase">
                               Save {discountPct}%
                             </span>
                           )}
@@ -275,7 +212,7 @@ const DailyMainsPage = () => {
 
                         {/* Feature Points Bullet List */}
                         <div>
-                          <span className="text-xs font-black uppercase text-[#0a2968] tracking-wider block mb-3">
+                          <span className="text-xs font-semibold uppercase text-[#0a2968] tracking-wider block mb-3">
                             Key Program Deliverables:
                           </span>
                           <ul className="space-y-2.5 text-xs font-semibold text-slate-700">
@@ -296,7 +233,7 @@ const DailyMainsPage = () => {
                                 setPreviewPdfUrl(plan.planPdf);
                                 setPreviewPdfTitle(plan.planPdfTitle || `${plan.title} Schedule PDF`);
                               }}
-                              className="w-full py-2.5 px-4 bg-blue-50/80 hover:bg-blue-100 text-[#0a2968] rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 border border-blue-200 transition-colors cursor-pointer"
+                              className="w-full py-2.5 px-4 bg-blue-50/80 hover:bg-blue-100 text-[#0a2968] rounded-xl text-xs font-semibold flex items-center justify-center gap-2 border border-blue-200 transition-colors cursor-pointer"
                             >
                               <FileText size={15} className="text-[#EF961D]" /> View {plan.planPdfTitle || "Micro-Topics & Schedule PDF"}
                             </button>
@@ -308,7 +245,7 @@ const DailyMainsPage = () => {
                       <div className="pt-6 border-t border-slate-100 mt-6">
                         <button
                           onClick={() => handleEnrollClick(plan)}
-                          className="w-full py-4 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-2xl font-black text-xs sm:text-sm uppercase tracking-wider shadow-md hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
+                          className="w-full py-4 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-2xl font-semibold text-xs sm:text-sm uppercase tracking-wider shadow-md hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer"
                         >
                           Enroll Now & Unlock Day 1 <ArrowRight size={16} />
                         </button>
@@ -320,6 +257,72 @@ const DailyMainsPage = () => {
             )}
           </div>
         </section>
+
+
+        {/* ================= 3. HOW DAILY MAINS DRIP WORKS SECTION ================= */}
+        <section className="py-16 px-4 sm:px-6 bg-slate-50 border-b border-slate-200/80">
+          <div className="max-w-6xl mx-auto space-y-12">
+            <div className="text-center space-y-3">
+              <span className="px-3.5 py-1 bg-amber-50 text-[#0a2968] font-semibold text-xs rounded-lg uppercase tracking-wider border border-amber-200">
+                Workflow Mechanism
+              </span>
+              <h2 className="text-2xl sm:text-4xl font-semibold text-[#0a2968] tracking-tight">
+                How Daily Mains Drip Unlock Works
+              </h2>
+              <p className="text-sm text-slate-500 font-semibold max-w-2xl mx-auto">
+                Designed to instill discipline & consistency. You cannot skip days or accumulate backlogs.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              {/* Step 1 */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
+                <div className="w-12 h-12 rounded-2xl bg-blue-50 text-[#0a2968] font-semibold text-lg flex items-center justify-center border border-blue-100 shadow-2xs">
+                  01
+                </div>
+                <h3 className="text-base font-semibold text-[#0a2968]">Day 1 Release on Purchase</h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  As soon as you enroll, Day 1 question paper PDF and micro-topic guidance unlock immediately on your dashboard.
+                </p>
+              </div>
+
+              {/* Step 2 */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
+                <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-700 font-semibold text-lg flex items-center justify-center border border-amber-200 shadow-2xs">
+                  02
+                </div>
+                <h3 className="text-base font-semibold text-[#0a2968]">Write & Upload Answer PDF</h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Write your answer on A4 sheets under exam conditions, scan to PDF and upload directly under Day 1 on your student portal.
+                </p>
+              </div>
+
+              {/* Step 3 */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
+                <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-700 font-semibold text-lg flex items-center justify-center border border-purple-200 shadow-2xs">
+                  03
+                </div>
+                <h3 className="text-base font-semibold text-[#0a2968]">Sequential Unlock of Next Day</h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Submitting Day 1 unlocks Day 2 (provided calendar date has reached Day 2 from purchase date). Zero backlogs possible!
+                </p>
+              </div>
+
+              {/* Step 4 */}
+              <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm relative space-y-4 hover:border-[#0a2968] transition-all">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 font-semibold text-lg flex items-center justify-center border border-emerald-200 shadow-2xs">
+                  04
+                </div>
+                <h3 className="text-base font-semibold text-[#0a2968]">24h Expert Evaluation</h3>
+                <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                  Faculty evaluates your copy line-by-line, provides marks & structural remarks, and uploads your checked PDF to your dashboard.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+
       </main>
 
       {/* PDF PREVIEW MODAL */}
@@ -327,7 +330,7 @@ const DailyMainsPage = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
           <div className="relative w-full max-w-4xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col h-[85vh]">
             <div className="p-4 px-6 bg-[#0a2968] text-white flex items-center justify-between">
-              <span className="font-extrabold text-sm truncate">{previewPdfTitle}</span>
+              <span className="font-semibold text-sm truncate">{previewPdfTitle}</span>
               <button
                 onClick={() => setPreviewPdfUrl(null)}
                 className="p-1 hover:bg-white/10 rounded-full text-slate-300 hover:text-white cursor-pointer"
@@ -363,3 +366,4 @@ const DailyMainsPage = () => {
 };
 
 export default DailyMainsPage;
+

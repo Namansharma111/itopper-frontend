@@ -523,30 +523,30 @@ const StudentDashboard = () => {
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
                             <div>
                               <div className="flex items-center gap-2 mb-2">
-                                <span className="px-3 py-1 bg-white/10 backdrop-blur-md text-[#EF961D] font-extrabold text-[11px] rounded-full uppercase tracking-wider flex items-center gap-1.5 border border-[#EF961D]/30">
+                                <span className="px-3 py-1 bg-white/10 backdrop-blur-md text-[#EF961D] font-semibold text-[11px] rounded-full uppercase tracking-wider flex items-center gap-1.5 border border-[#EF961D]/30">
                                   <Sparkles size={13} className="text-[#EF961D]" /> 30-Day Sequential Drip Plan
                                 </span>
-                                <span className="px-3 py-1 bg-[#EF961D] text-[#0a2968] font-black text-[11px] rounded-full uppercase shadow-xs">
+                                <span className="px-3 py-1 bg-[#EF961D] text-[#0a2968] font-semibold text-[11px] rounded-full uppercase shadow-xs">
                                   Today is Day {elapsedDays}
                                 </span>
                               </div>
-                              <h3 className="text-2xl sm:text-3xl font-black tracking-tight text-white leading-tight">
+                              <h3 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white leading-tight">
                                 Day-Wise Answer Writing & Daily Challenge Tracker
                               </h3>
                               <p className="text-slate-200 text-xs font-semibold mt-1.5">
-                                Plan Purchase Date: <strong className="text-white font-bold">{purchaseDateObj.toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</strong> • Day 1 = Purchase Date
+                                Plan Purchase Date: <strong className="text-white font-semibold">{purchaseDateObj.toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</strong> • Day 1 = Purchase Date
                               </p>
                             </div>
 
                             <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl text-right shrink-0 shadow-sm">
-                              <div className="text-3xl font-black text-white">{submittedCount} / {totalDaysCount}</div>
-                              <div className="text-[11px] font-extrabold text-[#EF961D] uppercase tracking-wider mt-0.5">Days Completed</div>
+                              <div className="text-3xl font-semibold text-white">{submittedCount} / {totalDaysCount}</div>
+                              <div className="text-[11px] font-semibold text-[#EF961D] uppercase tracking-wider mt-0.5">Days Completed</div>
                             </div>
                           </div>
 
                           {/* Progress Bar */}
                           <div className="space-y-1.5 relative z-10">
-                            <div className="flex justify-between text-xs font-extrabold text-slate-200">
+                            <div className="flex justify-between text-xs font-semibold text-slate-200">
                               <span>Completion Progress</span>
                               <span className="text-[#EF961D]">{Math.round((submittedCount / Math.max(1, totalDaysCount)) * 100)}% Submitted</span>
                             </div>
@@ -558,7 +558,7 @@ const StudentDashboard = () => {
                             </div>
                           </div>
 
-                          <div className="text-xs font-bold text-slate-100 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15 flex items-center gap-2.5 relative z-10">
+                          <div className="text-xs font-semibold text-slate-100 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15 flex items-center gap-2.5 relative z-10">
                             <ShieldAlert size={18} className="text-[#EF961D] shrink-0" />
                             <span>
                               <strong>Sequential Unlock Rule:</strong> Day 1 is unlocked today. Day 2 unlocks ONLY after Day 1 answer sheet is submitted AND Day 2 date arrives.
@@ -571,7 +571,7 @@ const StudentDashboard = () => {
                       <div className="space-y-4">
                         <div className="flex items-center justify-between mb-2">
                           <div>
-                            <h3 className="text-base font-extrabold text-[#0a2968]">
+                            <h3 className="text-base font-semibold text-[#0a2968]">
                               {isDayWiseCourse
                                 ? `30-Day Day-wise Content & Tests (${displayTestsList.length} Days)`
                                 : `Test Series & Answer Submissions (${displayTestsList.length} Tests)`}

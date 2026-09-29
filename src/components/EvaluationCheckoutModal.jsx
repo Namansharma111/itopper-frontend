@@ -194,7 +194,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
         <div className="bg-gradient-to-r from-[#0a2968] to-[#163F66] text-white p-5 px-6 flex items-center justify-between shadow-sm shrink-0">
           <div className="flex items-center gap-2">
             <ShieldCheck className="text-[#EF961D]" size={20} />
-            <span className="font-extrabold text-sm sm:text-base tracking-wide">
+            <span className="font-semibold text-sm sm:text-base tracking-wide">
               {step === "auth" ? "Sign In to Enroll" : "iTopper Checkout"}
             </span>
           </div>
@@ -211,12 +211,12 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
           {step === "auth" && (
             <div className="animate-in fade-in duration-300">
               <div className="text-center mb-6">
-                <span className="inline-block px-3 py-1 bg-blue-50 text-[#0a2968] text-xs font-bold rounded-full uppercase tracking-wider mb-2">
+                <span className="inline-block px-3 py-1 bg-blue-50 text-[#0a2968] text-xs font-semibold rounded-full uppercase tracking-wider mb-2">
                   Student Verification
                 </span>
-                <h3 className="text-xl font-bold text-slate-900">Sign in to Continue</h3>
+                <h3 className="text-xl font-semibold text-slate-900">Sign in to Continue</h3>
                 <p className="text-xs text-slate-500 font-semibold mt-1">
-                  Login or create account to trigger immediate checkout for <span className="text-[#0a2968] font-bold">"{plan.title}"</span>
+                  Login or create account to trigger immediate checkout for <span className="text-[#0a2968] font-semibold">"{plan.title}"</span>
                 </p>
               </div>
 
@@ -224,7 +224,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
               <div className="flex bg-slate-100 p-1 rounded-xl mb-6">
                 <button
                   onClick={() => setAuthMode("login")}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     authMode === "login" ? "bg-white text-[#0a2968] shadow-xs" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
@@ -232,7 +232,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
                 </button>
                 <button
                   onClick={() => setAuthMode("register")}
-                  className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                  className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                     authMode === "register" ? "bg-white text-[#0a2968] shadow-xs" : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
@@ -241,7 +241,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
               </div>
 
               {authError && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-bold text-red-600 flex items-center gap-2">
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-600 flex items-center gap-2">
                   <AlertCircle size={16} className="shrink-0" />
                   {authError}
                 </div>
@@ -250,7 +250,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
               <form onSubmit={handleAuthSubmit} className="space-y-4">
                 {authMode === "register" && (
                   <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Full Name</label>
+                    <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Full Name</label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                       <input
@@ -266,7 +266,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
                 )}
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Email Address</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Email Address</label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input
@@ -281,7 +281,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Password</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Password</label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                     <input
@@ -298,7 +298,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
                 <button
                   type="submit"
                   disabled={authLoading}
-                  className="w-full py-3 bg-[#0a2968] hover:bg-[#EF961D] text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 mt-2"
+                  className="w-full py-3 bg-[#0a2968] hover:bg-[#EF961D] text-white font-semibold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 mt-2"
                 >
                   {authLoading ? <Loader2 size={16} className="animate-spin" /> : <>Continue & Open Payment Gateway <ArrowRight size={14} /></>}
                 </button>
@@ -309,7 +309,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
                 <div className="mt-5 pt-4 border-t border-slate-100 text-center">
                   <button
                     onClick={handleQuickDemoLogin}
-                    className="text-xs font-bold text-[#0a2968] hover:text-[#EF961D] transition-colors inline-flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 px-4 py-2 rounded-xl border border-blue-200 cursor-pointer shadow-2xs"
+                    className="text-xs font-semibold text-[#0a2968] hover:text-[#EF961D] transition-colors inline-flex items-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 px-4 py-2 rounded-xl border border-blue-200 cursor-pointer shadow-2xs"
                   >
                     <Sparkles size={14} className="text-[#EF961D]" /> Guest Login & Open Payment Gateway
                   </button>
@@ -324,10 +324,10 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#0a2968] bg-blue-100/80 px-2 py-0.5 rounded">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-[#0a2968] bg-blue-100/80 px-2 py-0.5 rounded">
                       {plan.paperTag || plan.category}
                     </span>
-                    <h4 className="text-base font-bold text-slate-900 mt-1 leading-snug">
+                    <h4 className="text-base font-semibold text-slate-900 mt-1 leading-snug">
                       {plan.title}
                     </h4>
                   </div>
@@ -342,9 +342,9 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
 
               {/* Price Calculation Summary */}
               <div className="space-y-2 text-xs font-semibold text-slate-600 pt-2 border-t border-slate-100">
-                <div className="flex justify-between text-sm font-extrabold text-[#0a2968] pt-2 border-t border-slate-200">
+                <div className="flex justify-between text-sm font-semibold text-[#0a2968] pt-2 border-t border-slate-200">
                   <span>Total Payable Amount</span>
-                  <span className="text-base font-black">₹{finalPayable.toLocaleString("en-IN")}</span>
+                  <span className="text-base font-semibold">₹{finalPayable.toLocaleString("en-IN")}</span>
                 </div>
               </div>
 
@@ -352,7 +352,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
               <button
                 type="button"
                 onClick={() => startPaymentGateway(user)}
-                className="w-full py-3.5 bg-[#0a2968] hover:bg-[#EF961D] text-white font-extrabold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-3"
+                className="w-full py-3.5 bg-[#0a2968] hover:bg-[#EF961D] text-white font-semibold text-xs sm:text-sm uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer mt-3"
               >
                 Pay ₹{finalPayable.toLocaleString("en-IN")} via Razorpay <ArrowRight size={16} />
               </button>
@@ -366,7 +366,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
                 <Loader2 className="w-16 h-16 text-[#0a2968] animate-spin" />
                 <Lock className="w-6 h-6 text-[#EF961D] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">Opening Razorpay Payment Window...</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Opening Razorpay Payment Window...</h3>
               <p className="text-xs text-slate-500 font-semibold mt-1">Please complete the payment in the Razorpay popup</p>
             </div>
           )}
