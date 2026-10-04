@@ -760,7 +760,7 @@ const StudentDashboard = () => {
                             </h3>
                             <p className="text-xs text-slate-400 font-semibold">
                               {isDayWiseCourse
-                                ? "Day 1 available on purchase date. Day 2 unlocks after Day 1 submission!"
+                                ? "Day 1 available on purchase date. Day 2 unlocks on Day 2 after Day 1 submission!"
                                 : "Click any paper/test to view question PDF, upload answer scan, and check evaluated copies"}
                             </p>
                           </div>
@@ -866,7 +866,9 @@ const StudentDashboard = () => {
                                 <div className="p-3 bg-slate-100/90 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 flex flex-col sm:flex-row items-center justify-between gap-2">
                                   <span className="flex items-center gap-1.5">
                                     <Lock size={13} className="text-slate-500 shrink-0" />
-                                    Question Paper PDF & Answer Copy Upload will unlock once Day {dayNum - 1} is submitted.
+                                    {!isDayArrived
+                                      ? `Question Paper PDF & Answer Copy Upload will unlock on Day ${dayNum}.`
+                                      : `Question Paper PDF & Answer Copy Upload will unlock once Day ${dayNum - 1} is submitted.`}
                                   </span>
                                   <button disabled className="px-4 py-1.5 bg-slate-300 text-slate-600 rounded-lg text-xs font-bold cursor-not-allowed shrink-0">
                                     Locked
