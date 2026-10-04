@@ -434,3 +434,17 @@ export const getStudentSubmissionsApi = async (email = '') => {
   return JSON.parse(localStorage.getItem("itopper_all_student_submissions") || "[]");
 };
 
+export const getUserPurchasesApi = async (email = '') => {
+  if (!email) return { enrollments: [], transactions: [] };
+  try {
+    const url = getApiUrl(`/api/enrollments/user-purchases?email=${encodeURIComponent(email)}`);
+    const res = await fetch(url);
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn("Backend user-purchases API unreachable:", err.message);
+  }
+  return { enrollments: [], transactions: [] };
+};
+

@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
-import { getEvaluations, DEFAULT_EVALUATIONS, getEvaluationResultsApi, submitAnswerSheetApi } from '../utils/evaluationStorage';
+import { getEvaluations, DEFAULT_EVALUATIONS, getEvaluationResultsApi, submitAnswerSheetApi, getUserPurchasesApi } from '../utils/evaluationStorage';
 import { getDailyMains } from '../utils/dailyMainsStorage';
 import { uploadFileToCloudinary } from '../utils/uploadStorage';
 
@@ -40,7 +40,7 @@ const StudentDashboard = () => {
     loadEvaluationResults();
   }, [user]);
 
-  // Load purchased evaluation plans for this student
+  // Load purchased evaluation plans for this student (Syncs MongoDB DB + Local Storage)
   const loadPurchasedEvaluations = async () => {
     try {
       if (!user?.email) {
@@ -51,12 +51,13 @@ const StudentDashboard = () => {
       const isDemoUser = user?.isDemo || user?.id === 'demo_student_fixed' || userEmail === 'demo@itopper.com' || userEmail === 'student@itopper.com' || userEmail.includes('demo');
       const userKey = `itopper_purchased_evals_${userEmail}`;
 
+      const allEvals = await getEvaluations(true);
+      const allDailyMains = await getDailyMains(true);
+      const masterCatalog = [...allEvals, ...allDailyMains];
+
       if (isDemoUser) {
-        // ALWAYS load all available courses for Demo Account so all plans & 30-day tests can be tested
-        const allEvals = await getEvaluations(true);
-        const allDailyMains = await getDailyMains(true);
-        const allPlans = [...allEvals, ...allDailyMains];
-        const demoEvals = allPlans.map((p, idx) => ({
+        // ALWAYS load all available courses for Demo Account so all plans & tests can be tested
+        const demoEvals = masterCatalog.map((p, idx) => ({
           ...p,
           purchasedAt: p.purchasedAt || new Date(Date.now() - 3600000 * 24 * (idx % 2)).toISOString(),
           receiptId: "REC-" + Math.floor(100000 + Math.random() * 900000)
@@ -69,10 +70,61 @@ const StudentDashboard = () => {
         return;
       }
 
+      // 1. Fetch user's permanent enrollments & transactions from MongoDB database
+      const dbPurchases = await getUserPurchasesApi(userEmail);
+      const dbEnrollments = dbPurchases.enrollments || [];
+      const dbTransactions = dbPurchases.transactions || [];
+
       let userEvals = JSON.parse(localStorage.getItem(userKey) || "[]");
-      setPurchasedEvaluations(userEvals);
-      if (userEvals.length > 0 && !selectedCourseId) {
-        setSelectedCourseId(userEvals[0]._id || userEvals[0].id);
+
+      // Merge MongoDB enrollment records into userEvals
+      dbEnrollments.forEach(enr => {
+        const masterMatch = masterCatalog.find(
+          m => String(m._id || m.id) === String(enr.courseId) || m.title === enr.courseName
+        );
+        if (masterMatch && !userEvals.some(u => String(u._id || u.id) === String(masterMatch._id || masterMatch.id) || u.title === masterMatch.title)) {
+          userEvals.push({
+            ...masterMatch,
+            purchasedAt: enr.createdAt || new Date().toISOString(),
+            receiptId: enr.paymentId || "REC-" + Math.floor(100000 + Math.random() * 900000)
+          });
+        }
+      });
+
+      // Merge MongoDB transaction records into userEvals
+      dbTransactions.forEach(txn => {
+        const masterMatch = masterCatalog.find(
+          m => String(m._id || m.id) === String(txn.courseId) || m.title === txn.itemName
+        );
+        if (masterMatch && !userEvals.some(u => String(u._id || u.id) === String(masterMatch._id || masterMatch.id) || u.title === masterMatch.title)) {
+          userEvals.push({
+            ...masterMatch,
+            purchasedAt: txn.createdAt || new Date().toISOString(),
+            receiptId: txn.receipt || txn.paymentId || "REC-" + Math.floor(100000 + Math.random() * 900000)
+          });
+        }
+      });
+
+      // Merge latest test series updates & PDFs from master catalog
+      const syncedEvals = userEvals.map(purchasedPlan => {
+        const masterMatch = masterCatalog.find(
+          m => String(m._id || m.id) === String(purchasedPlan._id || purchasedPlan.id) || m.title === purchasedPlan.title
+        );
+        if (masterMatch) {
+          return {
+            ...purchasedPlan,
+            ...masterMatch,
+            purchasedAt: purchasedPlan.purchasedAt,
+            receiptId: purchasedPlan.receiptId
+          };
+        }
+        return purchasedPlan;
+      });
+
+      localStorage.setItem(userKey, JSON.stringify(syncedEvals));
+      setPurchasedEvaluations(syncedEvals);
+      if (syncedEvals.length > 0 && !selectedCourseId) {
+        setSelectedCourseId(syncedEvals[0]._id || syncedEvals[0].id);
       }
     } catch (e) {
       console.error("Error loading purchased evaluations:", e);
@@ -197,26 +249,130 @@ const StudentDashboard = () => {
     }));
   };
 
-  // Download PDF Helper
-  const handleDownloadPdf = (pdfUrl, fileName) => {
-    const targetUrl = pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-    const link = document.createElement("a");
-    link.href = targetUrl;
-    link.target = "_blank";
-    link.download = `${fileName.replace(/\s+/g, "_")}_iTopper.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const [loadingPdfKey, setLoadingPdfKey] = useState(null);
+
+  // View PDF Helper (Opens PDF in new tab with loading feedback)
+  const handleViewPdf = (pdfUrl, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+    try {
+      window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 600);
+    }
   };
 
-  // Print PDF Helper
-  const handlePrintPdf = (pdfUrl) => {
-    const targetUrl = pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-    const printWindow = window.open(targetUrl, '_blank');
-    if (printWindow) {
-      printWindow.focus();
-    } else {
-      alert("Please allow popups to open the print view for your PDF.");
+  // Download PDF Helper (100% Direct Disk Download across Cloudinary & CORS)
+  const handleDownloadPdf = async (pdfUrl, fileName, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+
+    const cleanName = ((fileName || 'Document').replace(/[^a-zA-Z0-9_-]/g, "_") || "Document") + "_iTopper.pdf";
+
+    try {
+      // 1. Cloudinary direct attachment download
+      if (pdfUrl.includes("cloudinary.com") && pdfUrl.includes("/upload/")) {
+        const attachmentUrl = pdfUrl.includes("/fl_attachment/")
+          ? pdfUrl
+          : pdfUrl.replace("/upload/", "/upload/fl_attachment/");
+        
+        const link = document.createElement("a");
+        link.href = attachmentUrl;
+        link.download = cleanName;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      // 2. Fetch Blob method (for local files, blobs, data URIs, or CORS-enabled URLs)
+      const response = await fetch(pdfUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error("HTTP error " + response.status);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+    } catch (err) {
+      console.warn("Direct download fallback triggered:", err);
+      const link = document.createElement("a");
+      link.href = pdfUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 800);
+    }
+  };
+
+  // Print PDF Helper (Triggers Native Browser Print Dialog in SAME tab without opening new tab)
+  const handlePrintPdf = async (pdfUrl, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+
+    try {
+      let printFrame = document.getElementById("itopper-print-iframe");
+      if (printFrame && document.body.contains(printFrame)) {
+        document.body.removeChild(printFrame);
+      }
+
+      printFrame = document.createElement("iframe");
+      printFrame.id = "itopper-print-iframe";
+      printFrame.style.position = "fixed";
+      printFrame.style.right = "-9999px";
+      printFrame.style.bottom = "-9999px";
+      printFrame.style.width = "1px";
+      printFrame.style.height = "1px";
+      printFrame.style.border = "0";
+
+      let frameSrc = pdfUrl;
+      try {
+        const response = await fetch(pdfUrl, { mode: 'cors' });
+        if (response.ok) {
+          const blob = await response.blob();
+          frameSrc = window.URL.createObjectURL(blob);
+        }
+      } catch (e) {
+        console.warn("Blob fetch fallback for print:", e);
+      }
+
+      printFrame.src = frameSrc;
+
+      let printed = false;
+      printFrame.onload = () => {
+        if (printed) return;
+        printed = true;
+        setTimeout(() => {
+          try {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+          } catch (err) {
+            console.error("Print iframe trigger error:", err);
+          }
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+            if (frameSrc.startsWith("blob:")) {
+              window.URL.revokeObjectURL(frameSrc);
+            }
+          }, 4000);
+        }, 300);
+      };
+
+      document.body.appendChild(printFrame);
+    } catch (err) {
+      console.error("handlePrintPdf error:", err);
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 1200);
     }
   };
 
@@ -241,13 +397,13 @@ const StudentDashboard = () => {
           id: `${course._id || course.id || 'eval'}-t1`,
           testName: `Test 1: ${course.paperTag || 'GS Paper'} Foundation & Concept Test`,
           testTitle: `Test 1: ${course.paperTag || 'GS Paper'} Foundation & Concept Test`,
-          questionPdf: course.planPdf || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+          questionPdf: ""
         },
         {
           id: `${course._id || course.id || 'eval'}-t2`,
           testName: `Test 2: ${course.paperTag || 'GS Paper'} Applied & Diagram Practice Test`,
           testTitle: `Test 2: ${course.paperTag || 'GS Paper'} Applied & Diagram Practice Test`,
-          questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
+          questionPdf: ""
         },
         {
           id: `${course._id || course.id || 'eval'}-t3`,
@@ -435,25 +591,51 @@ const StudentDashboard = () => {
                         <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
                           <button
                             type="button"
-                            onClick={() => toggleInlinePdf("overview_pdf")}
-                            className="px-3.5 py-2 bg-[#0a2968] hover:bg-[#12387a] text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                            disabled={loadingPdfKey === "v_overview"}
+                            onClick={() => handleViewPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, "v_overview")}
+                            className="px-3.5 py-2 bg-[#0a2968] hover:bg-[#12387a] text-white disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                           >
-                            <Eye size={15} className="text-[#EF961D]" />
-                            {openInlinePdfs["overview_pdf"] ? "Hide PDF" : "View PDF"}
+                            {loadingPdfKey === "v_overview" ? (
+                              <>
+                                <Loader2 size={15} className="animate-spin text-[#EF961D]" /> Opening...
+                              </>
+                            ) : (
+                              <>
+                                <Eye size={15} className="text-[#EF961D]" /> View PDF
+                              </>
+                            )}
                           </button>
                           <button
                             type="button"
-                            onClick={() => handlePrintPdf(selectedCourse.planPdf || selectedCourse.pdfUrl)}
-                            className="px-3 py-2 bg-white hover:bg-slate-100 text-[#0a2968] border border-slate-300 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                            disabled={loadingPdfKey === "p_overview"}
+                            onClick={() => handlePrintPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, "p_overview")}
+                            className="px-3 py-2 bg-white hover:bg-slate-100 text-[#0a2968] disabled:opacity-70 border border-slate-300 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                           >
-                            <Printer size={15} /> Print
+                            {loadingPdfKey === "p_overview" ? (
+                              <>
+                                <Loader2 size={15} className="animate-spin text-[#0a2968]" /> Printing...
+                              </>
+                            ) : (
+                              <>
+                                <Printer size={15} /> Print
+                              </>
+                            )}
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDownloadPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, selectedCourse.planPdfTitle || selectedCourse.title)}
-                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+                            disabled={loadingPdfKey === "d_overview"}
+                            onClick={() => handleDownloadPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, selectedCourse.planPdfTitle || selectedCourse.title, "d_overview")}
+                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
                           >
-                            <Download size={15} /> Download
+                            {loadingPdfKey === "d_overview" ? (
+                              <>
+                                <Loader2 size={15} className="animate-spin text-slate-700" /> Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download size={15} /> Download
+                              </>
+                            )}
                           </button>
                         </div>
                       </div>
@@ -476,7 +658,7 @@ const StudentDashboard = () => {
 
                 {/* Calculate Course Drip & Unlock Variables */}
                 {(() => {
-                  const isDayWiseCourse = selectedCourse?.isDayWiseSchedule || (selectedCourse?.tests && selectedCourse.tests.some(t => t.day !== undefined));
+                  const isDayWiseCourse = !!selectedCourse?.isDayWiseSchedule || selectedCourse?.category === 'Daily Mains';
                   const purchaseDateStr = selectedCourse?.purchasedAt || selectedCourse?.createdAt || Date.now();
                   const purchaseDateObj = new Date(purchaseDateStr);
                   const nowObj = new Date();
@@ -770,27 +952,54 @@ const StudentDashboard = () => {
                                       </div>
 
                                       {questionPdf ? (
-                                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                                           <button
                                             type="button"
-                                            onClick={() => toggleInlinePdf(qPdfKey)}
-                                            className="px-3 py-1.5 bg-[#0a2968] hover:bg-[#12387a] text-white rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                            disabled={loadingPdfKey === `v_q_${test.id}`}
+                                            onClick={() => handleViewPdf(questionPdf, `v_q_${test.id}`)}
+                                            className="px-3 py-1.5 bg-[#0a2968] hover:bg-[#12387a] text-white disabled:opacity-70 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
                                           >
-                                            <Eye size={13} className="text-[#EF961D]" /> {openInlinePdfs[qPdfKey] ? "Hide Paper PDF" : "View Paper PDF"}
+                                            {loadingPdfKey === `v_q_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Opening...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Eye size={13} className="text-[#EF961D]" /> View PDF
+                                              </>
+                                            )}
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handlePrintPdf(questionPdf)}
-                                            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#0a2968] border border-slate-300 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                                            disabled={loadingPdfKey === `p_q_${test.id}`}
+                                            onClick={() => handlePrintPdf(questionPdf, `p_q_${test.id}`)}
+                                            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#0a2968] disabled:opacity-70 border border-slate-300 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
                                           >
-                                            <Printer size={13} /> Print
+                                            {loadingPdfKey === `p_q_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={13} className="animate-spin text-[#0a2968]" /> Printing...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Printer size={13} /> Print
+                                              </>
+                                            )}
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handleDownloadPdf(questionPdf, testTitleStr)}
-                                            className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                                            disabled={loadingPdfKey === `d_q_${test.id}`}
+                                            onClick={() => handleDownloadPdf(questionPdf, testTitleStr, `d_q_${test.id}`)}
+                                            className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 disabled:opacity-70 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
                                           >
-                                            <Download size={13} /> Download
+                                            {loadingPdfKey === `d_q_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={13} className="animate-spin text-slate-700" /> Downloading...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Download size={13} /> Download
+                                              </>
+                                            )}
                                           </button>
                                         </div>
                                       ) : (
@@ -897,24 +1106,51 @@ const StudentDashboard = () => {
 
                                         <div className="flex items-center gap-2 shrink-0">
                                           <button
-                                            onClick={() => toggleInlinePdf(checkedPdfKey)}
-                                            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                            disabled={loadingPdfKey === `v_chk_${test.id}`}
+                                            onClick={() => handleViewPdf(personalCheckedCopy.resultPdf, `v_chk_${test.id}`)}
+                                            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-2xs cursor-pointer"
                                           >
-                                            <Award size={14} /> {openInlinePdfs[checkedPdfKey] ? "Hide Checked Copy" : "View Checked Copy PDF"}
+                                            {loadingPdfKey === `v_chk_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={14} className="animate-spin text-[#EF961D]" /> Opening...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Award size={14} /> View Checked Copy PDF
+                                              </>
+                                            )}
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handlePrintPdf(personalCheckedCopy.resultPdf)}
-                                            className="px-3 py-2 bg-white hover:bg-slate-100 text-emerald-900 border border-emerald-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            disabled={loadingPdfKey === `p_chk_${test.id}`}
+                                            onClick={() => handlePrintPdf(personalCheckedCopy.resultPdf, `p_chk_${test.id}`)}
+                                            className="px-3 py-2 bg-white hover:bg-slate-100 text-emerald-900 disabled:opacity-70 border border-emerald-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                                           >
-                                            <Printer size={14} /> Print
+                                            {loadingPdfKey === `p_chk_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={14} className="animate-spin text-emerald-900" /> Printing...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Printer size={14} /> Print
+                                              </>
+                                            )}
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handleDownloadPdf(personalCheckedCopy.resultPdf, `${testTitleStr}_Personal_Checked`)}
-                                            className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            disabled={loadingPdfKey === `d_chk_${test.id}`}
+                                            onClick={() => handleDownloadPdf(personalCheckedCopy.resultPdf, `${testTitleStr}_Personal_Checked`, `d_chk_${test.id}`)}
+                                            className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 disabled:opacity-70 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                                           >
-                                            <Download size={14} /> Download
+                                            {loadingPdfKey === `d_chk_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={14} className="animate-spin text-emerald-900" /> Downloading...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Download size={14} /> Download
+                                              </>
+                                            )}
                                           </button>
                                         </div>
                                       </div>
@@ -949,24 +1185,51 @@ const StudentDashboard = () => {
 
                                         <div className="flex items-center gap-2 shrink-0">
                                           <button
-                                            onClick={() => toggleInlinePdf(modelPdfKey)}
-                                            className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                            disabled={loadingPdfKey === `v_mdl_${test.id}`}
+                                            onClick={() => handleViewPdf(courseModelResult.resultPdf, `v_mdl_${test.id}`)}
+                                            className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 text-white disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-2xs cursor-pointer"
                                           >
-                                            <Award size={14} /> {openInlinePdfs[modelPdfKey] ? "Hide Model PDF" : "View Model Answer PDF"}
+                                            {loadingPdfKey === `v_mdl_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={14} className="animate-spin text-[#EF961D]" /> Opening...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Award size={14} /> View Model Answer PDF
+                                              </>
+                                            )}
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handlePrintPdf(courseModelResult.resultPdf)}
-                                            className="px-3 py-2 bg-white hover:bg-slate-100 text-purple-900 border border-purple-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            disabled={loadingPdfKey === `p_mdl_${test.id}`}
+                                            onClick={() => handlePrintPdf(courseModelResult.resultPdf, `p_mdl_${test.id}`)}
+                                            className="px-3 py-2 bg-white hover:bg-slate-100 text-purple-900 disabled:opacity-70 border border-purple-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                                           >
-                                            <Printer size={14} /> Print
+                                            {loadingPdfKey === `p_mdl_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={14} className="animate-spin text-purple-900" /> Printing...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Printer size={14} /> Print
+                                              </>
+                                            )}
                                           </button>
                                           <button
                                             type="button"
-                                            onClick={() => handleDownloadPdf(courseModelResult.resultPdf, `${testTitleStr}_Model_Answer`)}
-                                            className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-900 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            disabled={loadingPdfKey === `d_mdl_${test.id}`}
+                                            onClick={() => handleDownloadPdf(courseModelResult.resultPdf, `${testTitleStr}_Model_Answer`, `d_mdl_${test.id}`)}
+                                            className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-900 disabled:opacity-70 rounded-xl text-xs font-bold transition-colors cursor-pointer"
                                           >
-                                            <Download size={14} /> Download
+                                            {loadingPdfKey === `d_mdl_${test.id}` ? (
+                                              <>
+                                                <Loader2 size={14} className="animate-spin text-purple-900" /> Downloading...
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Download size={14} /> Download
+                                              </>
+                                            )}
                                           </button>
                                         </div>
                                       </div>

@@ -124,6 +124,20 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Global Cursor Pointer for all interactive elements */
+  button,
+  a,
+  select,
+  summary,
+  [role="button"],
+  input[type="button"],
+  input[type="submit"],
+  input[type="reset"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    cursor: pointer !important;
+  }
 }
 
 /* Hide scrollbar for Chrome, Safari and Opera */

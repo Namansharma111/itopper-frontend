@@ -77,6 +77,9 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
 
+  // Admin Global PDF Modal State
+  const [adminPreviewPdf, setAdminPreviewPdf] = useState(null);
+
   // Blog States
   const [blogs, setBlogs] = useState([]);
   const [blogLoading, setBlogLoading] = useState(false);
@@ -110,8 +113,6 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const [evalPurchaseUrl, setEvalPurchaseUrl] = useState("/#contact");
   const [evalPlanPdf, setEvalPlanPdf] = useState("");
   const [evalPlanPdfTitle, setEvalPlanPdfTitle] = useState("Syllabus & Program Overview PDF");
-  const [evalIsDayWiseSchedule, setEvalIsDayWiseSchedule] = useState(false);
-  const [evalTotalDays, setEvalTotalDays] = useState(30);
   const [evalTestsList, setEvalTestsList] = useState([
     { id: "t1", day: 1, testTitle: "Test 1: Modern Indian History & Freedom Struggle", questionPdf: "", textNote: "" },
     { id: "t2", day: 2, testTitle: "Test 2: Art, Culture & Ancient Literature", questionPdf: "", textNote: "" }
@@ -124,23 +125,6 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       ...prev,
       { id: `test-${Date.now()}-${prev.length + 1}`, day: prev.length + 1, testTitle: `Test ${prev.length + 1}: Mains Question Paper`, questionPdf: "", textNote: "" }
     ]);
-  };
-
-  const handleGenerate30DaysSchedule = () => {
-    const daysCount = Number(evalTotalDays) || 30;
-    const generated = Array.from({ length: daysCount }, (_, i) => {
-      const dayNum = i + 1;
-      return {
-        id: `day-${Date.now()}-${dayNum}`,
-        day: dayNum,
-        testTitle: `Day ${dayNum}: Mains Question Paper & Daily Practice Task`,
-        questionPdf: "",
-        textNote: `Day ${dayNum} practice test. Upload handwritten scan to unlock Day ${dayNum + 1}.`
-      };
-    });
-    setEvalTestsList(generated);
-    setEvalIsDayWiseSchedule(true);
-    alert(`✅ Generated 30 Days Test Schedule (Day 1 to Day ${daysCount})! You can now edit titles and attach PDFs.`);
   };
 
   const handleUpdateTestItem = (index, field, value) => {
@@ -349,6 +333,69 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const [activeStatModal, setActiveStatModal] = useState(null);
   const [studentModalSearch, setStudentModalSearch] = useState("");
 
+  // Pagination States for Admin Panel Tables & Card Grids
+  const [t1Page, setT1Page] = useState(1);
+  const [t2Page, setT2Page] = useState(1);
+  const [subTabPage, setSubTabPage] = useState(1);
+  const [evalPage, setEvalPage] = useState(1);
+  const [resPage, setResPage] = useState(1);
+  const [dmPage, setDmPage] = useState(1);
+  const [blogPage, setBlogPage] = useState(1);
+
+  // Helper for rendering clean, responsive pagination controls
+  const renderPaginationBar = (currentPage, totalItems, itemsPerPage, onPageChange) => {
+    const totalPages = Math.ceil(totalItems / itemsPerPage);
+    if (totalPages <= 1) return null;
+
+    const startIdx = (currentPage - 1) * itemsPerPage + 1;
+    const endIdx = Math.min(currentPage * itemsPerPage, totalItems);
+
+    return (
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 mt-4 border-t border-slate-100">
+        <div className="text-xs font-bold text-slate-500">
+          Showing <span className="text-[#0a2968] font-black">{startIdx}</span> to{" "}
+          <span className="text-[#0a2968] font-black">{endIdx}</span> of{" "}
+          <span className="text-[#0a2968] font-black">{totalItems}</span> entries
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => onPageChange(currentPage - 1)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-[#0a2968] hover:text-white disabled:opacity-40 disabled:hover:bg-slate-100 disabled:hover:text-slate-400 rounded-xl text-xs font-extrabold text-slate-700 transition-colors cursor-pointer border border-slate-200"
+          >
+            Previous
+          </button>
+
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+            <button
+              key={pageNum}
+              type="button"
+              onClick={() => onPageChange(pageNum)}
+              className={`w-8 h-8 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                currentPage === pageNum
+                  ? "bg-[#0a2968] text-white shadow-sm"
+                  : "bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200"
+              }`}
+            >
+              {pageNum}
+            </button>
+          ))}
+
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => onPageChange(currentPage + 1)}
+            className="px-3 py-1.5 bg-slate-100 hover:bg-[#0a2968] hover:text-white disabled:opacity-40 disabled:hover:bg-slate-100 disabled:hover:text-slate-400 rounded-xl text-xs font-extrabold text-slate-700 transition-colors cursor-pointer border border-slate-200"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const fetchStudentSubmissions = async () => {
     try {
       const apiSubs = await getStudentSubmissionsApi();
@@ -404,10 +451,42 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
     }
   };
 
-  const fetchDashboardAnalytics = () => {
+  const fetchDashboardAnalytics = async () => {
     try {
+      let dbPurchases = [];
+      try {
+        const resTxns = await fetch(getApiUrl('/api/payment/transactions'));
+        if (resTxns.ok) {
+          const txns = await resTxns.json();
+          if (Array.isArray(txns) && txns.length > 0) {
+            dbPurchases = txns.map(t => ({
+              id: t._id || t.orderId || t.paymentId,
+              title: t.itemName || 'UPSC Plan',
+              category: t.itemType || 'GS',
+              paperTag: t.itemType || 'GS Paper',
+              finalPrice: t.amount || 4999,
+              studentName: t.studentName || 'Student',
+              studentEmail: t.studentEmail || 'student@itopper.com',
+              receiptId: t.receipt || t.paymentId || 'REC-1001',
+              purchasedAt: new Date(t.createdAt || Date.now()).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn("Backend transactions API fetch error, fallback to local:", err.message);
+      }
+
       const globalEvals = JSON.parse(localStorage.getItem("itopper_purchased_evals_all") || "[]");
-      let allPurchases = [...globalEvals];
+      
+      const combinedMap = new Map();
+      [...dbPurchases, ...globalEvals].forEach(p => {
+        const key = p.receiptId || p.id || `${p.studentEmail}_${p.title}`;
+        if (!combinedMap.has(key)) {
+          combinedMap.set(key, p);
+        }
+      });
+
+      let allPurchases = Array.from(combinedMap.values());
 
       if (allPurchases.length === 0) {
         allPurchases = [
@@ -491,26 +570,130 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
     }
   };
 
-  // Admin Print & Download Helpers
-  const handlePrintPdf = (pdfUrl) => {
-    const targetUrl = pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-    const printWindow = window.open(targetUrl, '_blank');
-    if (printWindow) {
-      printWindow.focus();
-    } else {
-      alert("Please allow popups to open the print view for this PDF.");
+  // Admin Global PDF Loading State
+  const [loadingPdfKey, setLoadingPdfKey] = useState(null);
+
+  // Admin View, Print & Download Helpers
+  const handleViewPdf = (pdfUrl, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+    try {
+      window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 600);
     }
   };
 
-  const handleDownloadPdf = (pdfUrl, fileName) => {
-    const targetUrl = pdfUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-    const link = document.createElement("a");
-    link.href = targetUrl;
-    link.target = "_blank";
-    link.download = `${fileName.replace(/\s+/g, "_")}_iTopper.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handlePrintPdf = async (pdfUrl, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+
+    try {
+      let printFrame = document.getElementById("itopper-print-iframe");
+      if (printFrame && document.body.contains(printFrame)) {
+        document.body.removeChild(printFrame);
+      }
+
+      printFrame = document.createElement("iframe");
+      printFrame.id = "itopper-print-iframe";
+      printFrame.style.position = "fixed";
+      printFrame.style.right = "-9999px";
+      printFrame.style.bottom = "-9999px";
+      printFrame.style.width = "1px";
+      printFrame.style.height = "1px";
+      printFrame.style.border = "0";
+
+      let frameSrc = pdfUrl;
+      try {
+        const response = await fetch(pdfUrl, { mode: 'cors' });
+        if (response.ok) {
+          const blob = await response.blob();
+          frameSrc = window.URL.createObjectURL(blob);
+        }
+      } catch (e) {
+        console.warn("Blob fetch fallback for print:", e);
+      }
+
+      printFrame.src = frameSrc;
+
+      let printed = false;
+      printFrame.onload = () => {
+        if (printed) return;
+        printed = true;
+        setTimeout(() => {
+          try {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+          } catch (err) {
+            console.error("Print iframe trigger error:", err);
+          }
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+            if (frameSrc.startsWith("blob:")) {
+              window.URL.revokeObjectURL(frameSrc);
+            }
+          }, 4000);
+        }, 300);
+      };
+
+      document.body.appendChild(printFrame);
+    } catch (err) {
+      console.error("handlePrintPdf error:", err);
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 1200);
+    }
+  };
+
+  const handleDownloadPdf = async (pdfUrl, fileName, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+
+    const cleanName = ((fileName || 'Document').replace(/[^a-zA-Z0-9_-]/g, "_") || "Evaluation_Doc") + "_iTopper.pdf";
+
+    try {
+      // 1. Cloudinary direct attachment download
+      if (pdfUrl.includes("cloudinary.com") && pdfUrl.includes("/upload/")) {
+        const attachmentUrl = pdfUrl.includes("/fl_attachment/")
+          ? pdfUrl
+          : pdfUrl.replace("/upload/", "/upload/fl_attachment/");
+        
+        const link = document.createElement("a");
+        link.href = attachmentUrl;
+        link.download = cleanName;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      // 2. Fetch Blob method (for local files, blobs, data URIs, or CORS-enabled URLs)
+      const response = await fetch(pdfUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error("HTTP error " + response.status);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+    } catch (err) {
+      console.warn("Direct download fallback triggered:", err);
+      const link = document.createElement("a");
+      link.href = pdfUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 800);
+    }
   };
 
   const resetResultForm = () => {
@@ -757,8 +940,6 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
     setEvalPurchaseUrl("/#contact");
     setEvalPlanPdf("");
     setEvalPlanPdfTitle("Program Syllabus & Micro-Topics Overview PDF");
-    setEvalIsDayWiseSchedule(false);
-    setEvalTotalDays(30);
     setEvalTestsList([
       { id: "t-1", day: 1, testTitle: "Test 1: Modern Indian History & Freedom Struggle", questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", textNote: "" },
       { id: "t-2", day: 2, testTitle: "Test 2: Art, Culture & Ancient Literature", questionPdf: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf", textNote: "" }
@@ -798,8 +979,6 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       purchaseUrl: evalPurchaseUrl.trim() || "/#contact",
       planPdf: evalPlanPdf.trim(),
       planPdfTitle: evalPlanPdfTitle.trim() || "Program Syllabus & Micro-Topics Overview PDF",
-      isDayWiseSchedule: evalIsDayWiseSchedule,
-      totalDays: Number(evalTotalDays) || 30,
       published: evalPublished,
       tests: validTests
     };
@@ -1378,7 +1557,10 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   </label>
                   <select
                     value={selectedEvalPlanFilter}
-                    onChange={(e) => setSelectedEvalPlanFilter(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedEvalPlanFilter(e.target.value);
+                      setT1Page(1);
+                    }}
                     className="w-full md:w-72 bg-slate-50 border-2 border-[#0a2968]/20 focus:border-[#0a2968] rounded-xl px-4 py-2.5 text-xs font-extrabold text-[#0a2968] outline-none shadow-xs"
                   >
                     <option value="All">All Evaluation Plans ({studentSubmissions.length})</option>
@@ -1400,106 +1582,137 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                       <th className="py-3 px-4">Evaluation Plan Title</th>
                       <th className="py-3 px-4">Student Answer Sheet PDF</th>
                       <th className="py-3 px-4">Upload Date</th>
-                      <th className="py-3 px-4">Status</th>
-                      <th className="py-3 px-4 text-right">Admin Action</th>
+                      <th className="py-3 px-4 whitespace-nowrap min-w-[140px]">Status</th>
+                      <th className="py-3 px-4 text-right whitespace-nowrap">Admin Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                    {studentSubmissions
-                      .filter(sub => selectedEvalPlanFilter === "All" || sub.planTitle === selectedEvalPlanFilter)
-                      .length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
-                            No answer copy submissions found for the selected evaluation plan.
-                          </td>
-                        </tr>
-                      ) : (
-                        studentSubmissions
-                          .filter(sub => selectedEvalPlanFilter === "All" || sub.planTitle === selectedEvalPlanFilter)
-                          .map((sub, sIdx) => {
-                            const pdfUrl = sub.fileUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
-                            const isEvaluated = sub.status?.includes("Checked") || sub.status?.includes("Evaluated");
+                    {(() => {
+                      const filteredT1 = studentSubmissions.filter(sub => selectedEvalPlanFilter === "All" || sub.planTitle === selectedEvalPlanFilter);
+                      if (filteredT1.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={6} className="py-8 text-center text-slate-400 font-semibold">
+                              No answer copy submissions found for the selected evaluation plan.
+                            </td>
+                          </tr>
+                        );
+                      }
+                      const slicedT1 = filteredT1.slice((t1Page - 1) * 5, t1Page * 5);
+                      return slicedT1.map((sub, sIdx) => {
+                        const globalIdx = (t1Page - 1) * 5 + sIdx;
+                        const pdfUrl = sub.fileUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
+                        const isEvaluated = sub.status?.includes("Checked") || sub.status?.includes("Evaluated");
 
-                            return (
-                              <tr key={sIdx} className="hover:bg-slate-50/80 transition-colors">
-                                <td className="py-4 px-4">
-                                  <div className="font-extrabold text-slate-900">{sub.studentName}</div>
-                                  <div className="text-[11px] text-slate-500 font-medium">{sub.studentEmail}</div>
-                                </td>
+                        return (
+                          <tr key={globalIdx} className="hover:bg-slate-50/80 transition-colors">
+                            <td className="py-4 px-4">
+                              <div className="font-extrabold text-slate-900">{sub.studentName}</div>
+                              <div className="text-[11px] text-slate-500 font-medium">{sub.studentEmail}</div>
+                            </td>
 
-                                <td className="py-4 px-4 font-extrabold text-[#0a2968] max-w-[220px]">
-                                  {sub.planTitle}
-                                </td>
+                            <td className="py-4 px-4 font-extrabold text-[#0a2968] max-w-[220px]">
+                              {sub.planTitle}
+                            </td>
 
-                                {/* DOWNLOAD & PRINT STUDENT ANSWER SHEET */}
-                                <td className="py-4 px-4">
-                                  <div className="flex items-center gap-1.5">
-                                    <a
-                                      href={pdfUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="px-2.5 py-1.5 bg-blue-50 hover:bg-[#0a2968] text-[#0a2968] hover:text-white rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-colors border border-blue-100"
-                                    >
+                            {/* DOWNLOAD & PRINT STUDENT ANSWER SHEET */}
+                            <td className="py-4 px-4">
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  disabled={loadingPdfKey === `v_sub_${globalIdx}`}
+                                  onClick={() => handleViewPdf(pdfUrl, `v_sub_${globalIdx}`)}
+                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-[#0a2968] text-[#0a2968] hover:text-white disabled:opacity-70 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all border border-blue-100 cursor-pointer"
+                                >
+                                  {loadingPdfKey === `v_sub_${globalIdx}` ? (
+                                    <>
+                                      <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Opening...
+                                    </>
+                                  ) : (
+                                    <>
                                       <Eye size={13} /> View Copy
-                                    </a>
+                                    </>
+                                  )}
+                                </button>
 
-                                    <button
-                                      type="button"
-                                      onClick={() => handlePrintPdf(pdfUrl)}
-                                      className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors border border-slate-200"
-                                      title="Print Answer Sheet (Ctrl+P)"
-                                    >
+                                <button
+                                  type="button"
+                                  disabled={loadingPdfKey === `p_sub_${globalIdx}`}
+                                  onClick={() => handlePrintPdf(pdfUrl, `p_sub_${globalIdx}`)}
+                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-70 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all border border-slate-200 cursor-pointer"
+                                  title="Print Answer Sheet (Ctrl+P)"
+                                >
+                                  {loadingPdfKey === `p_sub_${globalIdx}` ? (
+                                    <>
+                                      <Loader2 size={13} className="animate-spin text-[#0a2968]" /> Printing...
+                                    </>
+                                  ) : (
+                                    <>
                                       <Printer size={13} /> Print
-                                    </button>
+                                    </>
+                                  )}
+                                </button>
 
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDownloadPdf(pdfUrl, `${sub.studentName}_AnswerSheet`)}
-                                      className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold transition-colors border border-slate-200"
-                                      title="Download PDF"
-                                    >
-                                      <Download size={13} />
-                                    </button>
-                                  </div>
-                                </td>
+                                <button
+                                  type="button"
+                                  disabled={loadingPdfKey === `d_sub_${globalIdx}`}
+                                  onClick={() => handleDownloadPdf(pdfUrl, `${sub.studentName}_AnswerSheet`, `d_sub_${globalIdx}`)}
+                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-70 rounded-lg text-[11px] font-bold transition-all border border-slate-200 cursor-pointer flex items-center gap-1"
+                                  title="Download PDF"
+                                >
+                                  {loadingPdfKey === `d_sub_${globalIdx}` ? (
+                                    <Loader2 size={13} className="animate-spin text-slate-700" />
+                                  ) : (
+                                    <Download size={13} />
+                                  )}
+                                </button>
+                              </div>
+                            </td>
 
-                                <td className="py-4 px-4 text-slate-500 font-medium">
-                                  {sub.uploadedAt}
-                                </td>
+                            <td className="py-4 px-4 text-slate-500 font-medium">
+                              {sub.uploadedAt}
+                            </td>
 
-                                <td className="py-4 px-4">
-                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                                    isEvaluated
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : 'bg-amber-50 text-amber-700 border-amber-200'
-                                  }`}>
-                                    {sub.status || "Under Evaluation"}
-                                  </span>
-                                </td>
+                            <td className="py-4 px-4 whitespace-nowrap min-w-[140px]">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border whitespace-nowrap inline-flex items-center gap-1 ${
+                                isEvaluated
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                              }`}>
+                                {isEvaluated ? <CheckCircle2 size={11} /> : <Clock size={11} />}
+                                {isEvaluated ? "CHECKED / EVALUATED" : "UNDER EVALUATION"}
+                              </span>
+                            </td>
 
-                                <td className="py-4 px-4 text-right">
-                                  <button
-                                    onClick={() => {
-                                      setResStudentEmail(sub.studentEmail);
-                                      setResPlanTitle(sub.planTitle);
-                                      setResPaperTag("GS Paper");
-                                      setResScore("124 / 250");
-                                      setResRemarks("Comprehensive review of modern history and geography questions...");
-                                      setResPdfUrl("https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf");
-                                      setShowResultForm(true);
-                                    }}
-                                    className="px-3 py-1.5 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl font-extrabold text-[11px] uppercase tracking-wider shadow-xs transition-all cursor-pointer flex items-center gap-1 ml-auto"
-                                  >
-                                    <Award size={13} /> Submit Checked Copy
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })
-                      )}
+                            <td className="py-4 px-4 text-right whitespace-nowrap">
+                              <button
+                                onClick={() => {
+                                  setResStudentEmail(sub.studentEmail);
+                                  setResPlanTitle(sub.planTitle);
+                                  setResPaperTag("GS Paper");
+                                  setResScore("124 / 250");
+                                  setResRemarks("Comprehensive review of modern history and geography questions...");
+                                  setResPdfUrl("https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf");
+                                  setShowResultForm(true);
+                                }}
+                                className="px-3 py-1.5 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl font-extrabold text-[11px] uppercase tracking-wider shadow-xs transition-all cursor-pointer flex items-center gap-1 ml-auto whitespace-nowrap"
+                              >
+                                <Award size={13} /> Submit Checked Copy
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
                   </tbody>
                 </table>
               </div>
+              {renderPaginationBar(
+                t1Page,
+                studentSubmissions.filter(sub => selectedEvalPlanFilter === "All" || sub.planTitle === selectedEvalPlanFilter).length,
+                5,
+                setT1Page
+              )}
             </div>
 
             {/* ================= SECTION 2: ENROLLED STUDENTS & PURCHASED PLANS TABLE ================= */}
@@ -1521,7 +1734,10 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                     <input
                       type="text"
                       value={adminSearchTerm}
-                      onChange={(e) => setAdminSearchTerm(e.target.value)}
+                      onChange={(e) => {
+                        setAdminSearchTerm(e.target.value);
+                        setT2Page(1);
+                      }}
                       placeholder="Search student or plan..."
                       className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl pl-9 pr-3 py-2 text-xs font-semibold outline-none text-slate-800"
                     />
@@ -1529,7 +1745,10 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
 
                   <select
                     value={adminCategoryFilter}
-                    onChange={(e) => setAdminCategoryFilter(e.target.value)}
+                    onChange={(e) => {
+                      setAdminCategoryFilter(e.target.value);
+                      setT2Page(1);
+                    }}
                     className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold outline-none text-slate-800"
                   >
                     <option value="All">All Categories</option>
@@ -1555,8 +1774,8 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
-                    {purchasesList
-                      .filter((item) => {
+                    {(() => {
+                      const filteredT2 = purchasesList.filter((item) => {
                         const term = adminSearchTerm.toLowerCase();
                         const matchesSearch =
                           !term ||
@@ -1566,8 +1785,20 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                         const matchesCategory =
                           adminCategoryFilter === "All" || item.category === adminCategoryFilter;
                         return matchesSearch && matchesCategory;
-                      })
-                      .map((item, idx) => (
+                      });
+
+                      if (filteredT2.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan={7} className="py-8 text-center text-slate-400 font-semibold">
+                              No purchases match your filter.
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      const slicedT2 = filteredT2.slice((t2Page - 1) * 5, t2Page * 5);
+                      return slicedT2.map((item, idx) => (
                         <tr key={item.id || idx} className="hover:bg-slate-50/80 transition-colors">
                           <td className="py-4 px-4">
                             <div className="font-extrabold text-slate-900">{item.studentName || item.studentEmail?.split('@')[0] || "Aspirant"}</div>
@@ -1607,10 +1838,27 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                             </button>
                           </td>
                         </tr>
-                      ))}
+                      ));
+                    })()}
                   </tbody>
                 </table>
               </div>
+              {renderPaginationBar(
+                t2Page,
+                purchasesList.filter((item) => {
+                  const term = adminSearchTerm.toLowerCase();
+                  const matchesSearch =
+                    !term ||
+                    (item.studentName && item.studentName.toLowerCase().includes(term)) ||
+                    (item.studentEmail && item.studentEmail.toLowerCase().includes(term)) ||
+                    (item.title && item.title.toLowerCase().includes(term));
+                  const matchesCategory =
+                    adminCategoryFilter === "All" || item.category === adminCategoryFilter;
+                  return matchesSearch && matchesCategory;
+                }).length,
+                5,
+                setT2Page
+              )}
             </div>
 
             {/* ================= MODAL 1: ENROLLED STUDENTS DIRECTORY MODAL ================= */}
@@ -1976,7 +2224,11 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   <div>
                     <select
                       value={selectedEvalPlanFilter}
-                      onChange={(e) => setSelectedEvalPlanFilter(e.target.value)}
+                      onChange={(e) => {
+                        setSelectedEvalPlanFilter(e.target.value);
+                        setSubTabPage(1);
+                        setT1Page(1);
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-[#0a2968] outline-none"
                     >
                       <option value="All">All Courses ({studentSubmissions.length})</option>
@@ -1992,7 +2244,10 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   <div>
                     <select
                       value={subFilterStatus}
-                      onChange={(e) => setSubFilterStatus(e.target.value)}
+                      onChange={(e) => {
+                        setSubFilterStatus(e.target.value);
+                        setSubTabPage(1);
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-[#0a2968] outline-none"
                     >
                       <option value="All">All Statuses</option>
@@ -2005,7 +2260,10 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   <div>
                     <select
                       value={subSortBy}
-                      onChange={(e) => setSubSortBy(e.target.value)}
+                      onChange={(e) => {
+                        setSubSortBy(e.target.value);
+                        setSubTabPage(1);
+                      }}
                       className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-xl px-3.5 py-2.5 text-xs font-extrabold text-[#0a2968] outline-none"
                     >
                       <option value="newest">Sort: Newest First</option>
@@ -2028,8 +2286,8 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                       <th className="py-3.5 px-4">Course & Test Submitted</th>
                       <th className="py-3.5 px-4">Answer Sheet PDF</th>
                       <th className="py-3.5 px-4">Upload Date</th>
-                      <th className="py-3.5 px-4">Evaluation Status</th>
-                      <th className="py-3.5 px-4 text-right">Admin Action</th>
+                      <th className="py-3.5 px-4 whitespace-nowrap min-w-[140px]">Evaluation Status</th>
+                      <th className="py-3.5 px-4 text-right whitespace-nowrap">Admin Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-xs font-semibold text-slate-700">
@@ -2071,12 +2329,14 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                         );
                       }
 
-                      return filtered.map((sub, sIdx) => {
+                      const slicedSub = filtered.slice((subTabPage - 1) * 6, subTabPage * 6);
+                      return slicedSub.map((sub, sIdx) => {
+                        const globalIdx = (subTabPage - 1) * 6 + sIdx;
                         const pdfUrl = sub.fileUrl || "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf";
                         const isEvaluated = sub.status?.includes("Checked") || sub.status?.includes("Evaluated");
 
                         return (
-                          <tr key={sIdx} className="hover:bg-slate-50/80 transition-colors">
+                          <tr key={globalIdx} className="hover:bg-slate-50/80 transition-colors">
                             <td className="py-4 px-4">
                               <div className="flex items-center gap-3">
                                 <div className="w-9 h-9 rounded-xl bg-[#0a2968]/10 text-[#0a2968] font-black text-xs flex items-center justify-center shrink-0 border border-[#0a2968]/20">
@@ -2101,31 +2361,53 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
 
                             <td className="py-4 px-4">
                               <div className="flex items-center gap-1.5">
-                                <a
-                                  href={pdfUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-[#0a2968] text-[#0a2968] hover:text-white rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-colors border border-blue-100"
-                                >
-                                  <Eye size={13} /> View Copy
-                                </a>
-
                                 <button
                                   type="button"
-                                  onClick={() => handlePrintPdf(pdfUrl)}
-                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors border border-slate-200"
-                                  title="Print Answer Sheet"
+                                  disabled={loadingPdfKey === `v_eval_${sub.id || globalIdx}`}
+                                  onClick={() => handleViewPdf(pdfUrl, `v_eval_${sub.id || globalIdx}`)}
+                                  className="px-2.5 py-1.5 bg-blue-50 hover:bg-[#0a2968] text-[#0a2968] hover:text-white disabled:opacity-70 rounded-lg text-[11px] font-extrabold flex items-center gap-1 transition-all border border-blue-100 cursor-pointer"
                                 >
-                                  <Printer size={13} /> Print
+                                  {loadingPdfKey === `v_eval_${sub.id || globalIdx}` ? (
+                                    <>
+                                      <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Opening...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Eye size={13} /> View Copy
+                                    </>
+                                  )}
                                 </button>
 
                                 <button
                                   type="button"
-                                  onClick={() => handleDownloadPdf(pdfUrl, `${sub.studentName}_AnswerSheet`)}
-                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold transition-colors border border-slate-200"
+                                  disabled={loadingPdfKey === `p_eval_${sub.id || globalIdx}`}
+                                  onClick={() => handlePrintPdf(pdfUrl, `p_eval_${sub.id || globalIdx}`)}
+                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-70 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all border border-slate-200 cursor-pointer"
+                                  title="Print Answer Sheet"
+                                >
+                                  {loadingPdfKey === `p_eval_${sub.id || globalIdx}` ? (
+                                    <>
+                                      <Loader2 size={13} className="animate-spin text-[#0a2968]" /> Printing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Printer size={13} /> Print
+                                    </>
+                                  )}
+                                </button>
+
+                                <button
+                                  type="button"
+                                  disabled={loadingPdfKey === `d_eval_${sub.id || globalIdx}`}
+                                  onClick={() => handleDownloadPdf(pdfUrl, `${sub.studentName}_AnswerSheet`, `d_eval_${sub.id || globalIdx}`)}
+                                  className="px-2 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-70 rounded-lg text-[11px] font-bold transition-all border border-slate-200 cursor-pointer flex items-center gap-1"
                                   title="Download PDF"
                                 >
-                                  <Download size={13} />
+                                  {loadingPdfKey === `d_eval_${sub.id || globalIdx}` ? (
+                                    <Loader2 size={13} className="animate-spin text-slate-700" />
+                                  ) : (
+                                    <Download size={13} />
+                                  )}
                                 </button>
                               </div>
                             </td>
@@ -2134,18 +2416,18 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                               {sub.uploadedAt}
                             </td>
 
-                            <td className="py-4 px-4">
-                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border inline-flex items-center gap-1 ${
+                            <td className="py-4 px-4 whitespace-nowrap min-w-[140px]">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border whitespace-nowrap inline-flex items-center gap-1 ${
                                 isEvaluated
                                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                                   : 'bg-amber-50 text-amber-700 border-amber-200'
                               }`}>
                                 {isEvaluated ? <CheckCircle2 size={11} /> : <Clock size={11} />}
-                                {sub.status || "Under Evaluation"}
+                                {isEvaluated ? "CHECKED / EVALUATED" : "UNDER EVALUATION"}
                               </span>
                             </td>
 
-                            <td className="py-4 px-4 text-right">
+                            <td className="py-4 px-4 text-right whitespace-nowrap">
                               <button
                                 onClick={() => {
                                   setResStudentEmail(sub.studentEmail);
@@ -2158,7 +2440,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                                   setResTargetType("personal");
                                   setShowResultForm(true);
                                 }}
-                                className={`px-3.5 py-2 rounded-xl font-extrabold text-[11px] uppercase tracking-wider shadow-xs transition-all cursor-pointer flex items-center gap-1.5 ml-auto ${
+                                className={`px-3.5 py-2 rounded-xl font-extrabold text-[11px] uppercase tracking-wider shadow-xs transition-all cursor-pointer flex items-center gap-1.5 ml-auto whitespace-nowrap ${
                                   isEvaluated
                                     ? 'bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200'
                                     : 'bg-[#0a2968] hover:bg-[#EF961D] text-white'
@@ -2174,6 +2456,23 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   </tbody>
                 </table>
               </div>
+              {renderPaginationBar(
+                subTabPage,
+                studentSubmissions.filter(sub => {
+                  const matchPlan = selectedEvalPlanFilter === "All" || sub.planTitle === selectedEvalPlanFilter;
+                  const matchStatus = subFilterStatus === "All" ||
+                    (subFilterStatus === "Under Evaluation" && (sub.status === "Under Evaluation" || !sub.status)) ||
+                    (subFilterStatus === "Checked / Evaluated" && sub.status?.includes("Checked"));
+                  const matchQuery = !subSearchQuery.trim() ||
+                    (sub.studentName || "").toLowerCase().includes(subSearchQuery.toLowerCase()) ||
+                    (sub.studentEmail || "").toLowerCase().includes(subSearchQuery.toLowerCase()) ||
+                    (sub.testName || "").toLowerCase().includes(subSearchQuery.toLowerCase()) ||
+                    (sub.planTitle || "").toLowerCase().includes(subSearchQuery.toLowerCase());
+                  return matchPlan && matchStatus && matchQuery;
+                }).length,
+                6,
+                setSubTabPage
+              )}
             </div>
           </div>
         )}
@@ -2206,82 +2505,85 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                 No blog posts created yet. Click "Write Article" to publish your first post!
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {blogs.map((b, index) => (
-                  <div
-                    key={b._id || b.id || index}
-                    className="group bg-white rounded-3xl border border-slate-200/80 hover:border-[#0a2968]/30 hover:shadow-xl transition-all flex flex-col overflow-hidden shadow-sm"
-                  >
-                    <div className="relative h-48 bg-slate-100 overflow-hidden border-b border-slate-100">
-                      <img
-                        src={b.image || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&q=80&w=400"}
-                        alt={b.title}
-                        className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-700 ease-out"
-                      />
-                      <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => {
-                            setEditingBlog(b);
-                            setBlogTitle(b.title);
-                            setBlogCategory(b.category);
-                            setBlogReadTime(b.readTime);
-                            setBlogExcerpt(b.excerpt);
-                            setBlogImage(b.image);
-                            setBlogContent(b.content);
-                            setBlogPublished(b.published);
-                            setSeoTitle(b.seoTitle || "");
-                            setSeoKeywords(b.seoKeywords || "");
-                            setShowBlogForm(true);
-                          }}
-                          className="p-2 bg-white/95 rounded-full text-slate-800 hover:bg-[#0a2968] hover:text-white border border-slate-200 shadow-md cursor-pointer transition-colors"
-                          title="Edit Article"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={async () => {
-                            const blogId = b._id || b.id;
-                            if (window.confirm("Are you sure you want to delete this article?")) {
-                              try {
-                                await deleteBlog(blogId);
-                                fetchBlogs();
-                              } catch (err) {
-                                alert("Failed to delete article.");
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {blogs.slice((blogPage - 1) * 6, blogPage * 6).map((b, index) => (
+                    <div
+                      key={b._id || b.id || index}
+                      className="group bg-white rounded-3xl border border-slate-200/80 hover:border-[#0a2968]/30 hover:shadow-xl transition-all flex flex-col overflow-hidden shadow-sm"
+                    >
+                      <div className="relative h-48 bg-slate-100 overflow-hidden border-b border-slate-100">
+                        <img
+                          src={b.image || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&q=80&w=400"}
+                          alt={b.title}
+                          className="w-full h-full object-cover group-hover:scale-103 transition-transform duration-700 ease-out"
+                        />
+                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => {
+                              setEditingBlog(b);
+                              setBlogTitle(b.title);
+                              setBlogCategory(b.category);
+                              setBlogReadTime(b.readTime);
+                              setBlogExcerpt(b.excerpt);
+                              setBlogImage(b.image);
+                              setBlogContent(b.content);
+                              setBlogPublished(b.published);
+                              setSeoTitle(b.seoTitle || "");
+                              setSeoKeywords(b.seoKeywords || "");
+                              setShowBlogForm(true);
+                            }}
+                            className="p-2 bg-white/95 rounded-full text-slate-800 hover:bg-[#0a2968] hover:text-white border border-slate-200 shadow-md cursor-pointer transition-colors"
+                            title="Edit Article"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const blogId = b._id || b.id;
+                              if (window.confirm("Are you sure you want to delete this article?")) {
+                                try {
+                                  await deleteBlog(blogId);
+                                  fetchBlogs();
+                                } catch (err) {
+                                  alert("Failed to delete article.");
+                                }
                               }
-                            }
-                          }}
-                          className="p-2 bg-white/95 rounded-full text-slate-800 hover:bg-red-500 hover:text-white border border-slate-200 shadow-md cursor-pointer transition-colors"
-                          title="Delete Article"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                      <span className={`absolute bottom-4 left-4 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm ${b.published ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-orange-50 text-orange-500 border border-orange-200'}`}>
-                        {b.published ? "Published" : "Draft"}
-                      </span>
-                    </div>
-                    <div className="p-6 flex-1 flex flex-col justify-between">
-                      <div>
-                        <span className="text-xs font-bold text-slate-400 uppercase block mb-1">
-                          {b.category} • {b.readTime}
+                            }}
+                            className="p-2 bg-white/95 rounded-full text-slate-800 hover:bg-red-500 hover:text-white border border-slate-200 shadow-md cursor-pointer transition-colors"
+                            title="Delete Article"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        <span className={`absolute bottom-4 left-4 px-3 py-1 rounded-full text-[10px] font-black tracking-widest uppercase shadow-sm ${b.published ? 'bg-green-50 text-green-600 border border-green-200' : 'bg-orange-50 text-orange-500 border border-orange-200'}`}>
+                          {b.published ? "Published" : "Draft"}
                         </span>
-                        <h3 className="text-xl font-bold text-[#0a2968] mb-2 line-clamp-2">
-                          {b.title}
-                        </h3>
-                        <p className="text-slate-500 text-sm line-clamp-3 mb-4 font-semibold leading-relaxed">
-                          {b.excerpt}
-                        </p>
                       </div>
-                      <div className="pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400 font-bold">
-                        <span>{b.date}</span>
-                        <Link to={`/blog/${b._id || b.id}`} target="_blank" className="text-[#0a2968] hover:text-[#EF961D] font-bold flex items-center gap-1 transition-colors">
-                          View Live <ExternalLink size={12} />
-                        </Link>
+                      <div className="p-6 flex-1 flex flex-col justify-between">
+                        <div>
+                          <span className="text-xs font-bold text-slate-400 uppercase block mb-1">
+                            {b.category} • {b.readTime}
+                          </span>
+                          <h3 className="text-xl font-bold text-[#0a2968] mb-2 line-clamp-2">
+                            {b.title}
+                          </h3>
+                          <p className="text-slate-500 text-sm line-clamp-3 mb-4 font-semibold leading-relaxed">
+                            {b.excerpt}
+                          </p>
+                        </div>
+                        <div className="pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400 font-bold">
+                          <span>{b.date}</span>
+                          <Link to={`/blog/${b._id || b.id}`} target="_blank" className="text-[#0a2968] hover:text-[#EF961D] font-bold flex items-center gap-1 transition-colors">
+                            View Live <ExternalLink size={12} />
+                          </Link>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {renderPaginationBar(blogPage, blogs.length, 6, setBlogPage)}
+              </>
             )}
           </div>
         )}
@@ -2316,116 +2618,117 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                 No evaluation cards found. Click "Add New Evaluation Plan" to create one.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {evaluations.map((item, index) => (
-                  <div
-                    key={item._id || item.id || index}
-                    className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden p-6 relative"
-                  >
-                    {/* Badge */}
-                    <div className="flex justify-between items-start mb-4">
-                      <span className="px-3 py-1 bg-[#0a2968]/10 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider border border-[#0a2968]/15">
-                        {item.category} • {item.paperTag || "GS"}
-                      </span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${item.published ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
-                        {item.published ? "Active" : "Hidden"}
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xl font-extrabold text-[#0a2968] mb-2 leading-tight">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 font-semibold line-clamp-2 mb-4">
-                        {item.description}
-                      </p>
-
-                      {/* Pricing */}
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 mb-4 flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-[#0a2968]">
-                          ₹{item.finalPrice?.toLocaleString("en-IN")}
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {evaluations.slice((evalPage - 1) * 6, evalPage * 6).map((item, index) => (
+                    <div
+                      key={item._id || item.id || index}
+                      className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden p-6 relative"
+                    >
+                      {/* Badge */}
+                      <div className="flex justify-between items-start mb-4">
+                        <span className="px-3 py-1 bg-[#0a2968]/10 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider border border-[#0a2968]/15">
+                          {item.category} • {item.paperTag || "GS"}
                         </span>
-                        {item.mrpPrice > item.finalPrice && (
-                          <span className="text-xs font-bold text-slate-400 line-through">
-                            ₹{item.mrpPrice?.toLocaleString("en-IN")}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${item.published ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
+                          {item.published ? "Active" : "Hidden"}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h3 className="text-xl font-extrabold text-[#0a2968] mb-2 leading-tight">
+                          {item.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 font-semibold line-clamp-2 mb-4">
+                          {item.description}
+                        </p>
+
+                        {/* Pricing */}
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 mb-4 flex items-baseline gap-2">
+                          <span className="text-2xl font-black text-[#0a2968]">
+                            ₹{item.finalPrice?.toLocaleString("en-IN")}
                           </span>
-                        )}
-                        <span className="text-[11px] text-slate-500 font-bold ml-auto">{item.duration}</span>
+                          {item.mrpPrice > item.finalPrice && (
+                            <span className="text-xs font-bold text-slate-400 line-through">
+                              ₹{item.mrpPrice?.toLocaleString("en-IN")}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-slate-500 font-bold ml-auto">{item.duration}</span>
+                        </div>
+
+                        {/* Features Preview */}
+                        <div className="space-y-1.5 mb-6">
+                          {item.features && item.features.slice(0, 3).map((f, fIdx) => (
+                            <div key={fIdx} className="flex items-center gap-2 text-xs font-bold text-slate-700 truncate">
+                              <CheckCircle2 size={14} className="text-[#EF961D] shrink-0" />
+                              <span className="truncate">{f}</span>
+                            </div>
+                          ))}
+                          {item.features && item.features.length > 3 && (
+                            <span className="text-[11px] font-bold text-slate-400 pl-5">+ {item.features.length - 3} more features</span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Features Preview */}
-                      <div className="space-y-1.5 mb-6">
-                        {item.features && item.features.slice(0, 3).map((f, fIdx) => (
-                          <div key={fIdx} className="flex items-center gap-2 text-xs font-bold text-slate-700 truncate">
-                            <CheckCircle2 size={14} className="text-[#EF961D] shrink-0" />
-                            <span className="truncate">{f}</span>
-                          </div>
-                        ))}
-                        {item.features && item.features.length > 3 && (
-                          <span className="text-[11px] font-bold text-slate-400 pl-5">+ {item.features.length - 3} more features</span>
-                        )}
-                      </div>
-                    </div>
+                      {/* Action Bar */}
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <button
+                          onClick={() => {
+                            setEditingEval(item);
+                            setEvalTitle(item.title);
+                            setEvalCategory(item.category || "GS");
+                            setEvalPaperTag(item.paperTag || "GS Paper 1");
+                            setEvalDescription(item.description || "");
+                            setEvalFeatures(Array.isArray(item.features) ? item.features.join("\n") : "");
+                            setEvalMrpPrice(item.mrpPrice || 7999);
+                            setEvalFinalPrice(item.finalPrice || 4999);
+                            setEvalDuration(item.duration || "Till Mains 2026");
+                            setEvalBadge(item.badge || "Popular");
+                            setEvalPurchaseUrl(item.purchaseUrl || "/#contact");
+                            setEvalPlanPdf(item.planPdf || "");
+                            setEvalPlanPdfTitle(item.planPdfTitle || "Program Syllabus & Micro-Topics Overview PDF");
+                            setEvalTestsList(
+                              Array.isArray(item.tests) && item.tests.length > 0
+                                ? item.tests.map((t, i) => ({
+                                    id: t.id || `test-${i}`,
+                                    day: t.day || i + 1,
+                                    testTitle: t.testName || t.testTitle || (typeof t === 'string' ? t : `Test ${i + 1}`),
+                                    questionPdf: t.questionPdf || "",
+                                    textNote: t.textNote || ""
+                                  }))
+                                : [{ id: "t-1", day: 1, testTitle: "Test 1: Mains Question Paper", questionPdf: "", textNote: "" }]
+                            );
+                            setEvalPublished(item.published !== undefined ? item.published : true);
+                            setShowEvalForm(true);
+                          }}
+                          className="px-4 py-2 bg-slate-100 hover:bg-[#0a2968] hover:text-white rounded-xl text-xs font-extrabold text-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit2 size={14} /> Edit Plan
+                        </button>
 
-                    {/* Action Bar */}
-                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <button
-                        onClick={() => {
-                          setEditingEval(item);
-                          setEvalTitle(item.title);
-                          setEvalCategory(item.category || "GS");
-                          setEvalPaperTag(item.paperTag || "GS Paper 1");
-                          setEvalDescription(item.description || "");
-                          setEvalFeatures(Array.isArray(item.features) ? item.features.join("\n") : "");
-                          setEvalMrpPrice(item.mrpPrice || 7999);
-                          setEvalFinalPrice(item.finalPrice || 4999);
-                          setEvalDuration(item.duration || "Till Mains 2026");
-                          setEvalBadge(item.badge || "Popular");
-                          setEvalPurchaseUrl(item.purchaseUrl || "/#contact");
-                          setEvalPlanPdf(item.planPdf || "");
-                          setEvalPlanPdfTitle(item.planPdfTitle || "Program Syllabus & Micro-Topics Overview PDF");
-                          setEvalIsDayWiseSchedule(item.isDayWiseSchedule || false);
-                          setEvalTotalDays(item.totalDays || 30);
-                          setEvalTestsList(
-                            Array.isArray(item.tests) && item.tests.length > 0
-                              ? item.tests.map((t, i) => ({
-                                  id: t.id || `test-${i}`,
-                                  day: t.day || i + 1,
-                                  testTitle: t.testName || t.testTitle || (typeof t === 'string' ? t : `Test ${i + 1}`),
-                                  questionPdf: t.questionPdf || "",
-                                  textNote: t.textNote || ""
-                                }))
-                              : [{ id: "t-1", day: 1, testTitle: "Test 1: Mains Question Paper", questionPdf: "", textNote: "" }]
-                          );
-                          setEvalPublished(item.published !== undefined ? item.published : true);
-                          setShowEvalForm(true);
-                        }}
-                        className="px-4 py-2 bg-slate-100 hover:bg-[#0a2968] hover:text-white rounded-xl text-xs font-extrabold text-slate-700 transition-colors flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Edit2 size={14} /> Edit Plan
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          const evalId = item._id || item.id;
-                          if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
-                            try {
-                              await deleteEvaluation(evalId);
-                              fetchEvaluations();
-                            } catch (err) {
-                              alert("Failed to delete evaluation plan.");
+                        <button
+                          onClick={async () => {
+                            const evalId = item._id || item.id;
+                            if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
+                              try {
+                                await deleteEvaluation(evalId);
+                                fetchEvaluations();
+                              } catch (err) {
+                                alert("Failed to delete evaluation plan.");
+                              }
                             }
-                          }
-                        }}
-                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
-                        title="Delete Plan"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                          }}
+                          className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
+                          title="Delete Plan"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {renderPaginationBar(evalPage, evaluations.length, 6, setEvalPage)}
+              </>
             )}
           </div>
         )}
@@ -2456,57 +2759,100 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                 No evaluation results uploaded yet. Click "Upload New Result PDF" to publish an evaluated copy for students.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {resultsList.map((resItem) => (
-                  <div
-                    key={resItem.id}
-                    className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between p-6 relative"
-                  >
-                    <div>
-                      <div className="flex justify-between items-center mb-3">
-                        <span className="px-3 py-1 bg-blue-50 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider border border-blue-100">
-                          {resItem.paperTag || "GS Paper"}
-                        </span>
-                        <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-black text-xs rounded-full uppercase tracking-wider border border-emerald-200">
-                          Marks: {resItem.score}
-                        </span>
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {resultsList.slice((resPage - 1) * 6, resPage * 6).map((resItem) => (
+                    <div
+                      key={resItem.id}
+                      className="bg-white rounded-3xl border border-slate-200 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between p-6 relative"
+                    >
+                      <div>
+                        <div className="flex justify-between items-center mb-3">
+                          <span className="px-3 py-1 bg-blue-50 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider border border-blue-100">
+                            {resItem.paperTag || "GS Paper"}
+                          </span>
+                          <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-black text-xs rounded-full uppercase tracking-wider border border-emerald-200">
+                            Marks: {resItem.score}
+                          </span>
+                        </div>
+
+                        <h3 className="text-lg font-black text-[#0a2968] mb-2 leading-tight">
+                          {resItem.planTitle}
+                        </h3>
+
+                        <p className="text-xs text-slate-500 font-semibold mb-3">
+                          Student: <strong className="text-slate-800">{resItem.studentEmail}</strong>
+                        </p>
+
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 text-xs text-slate-600 font-semibold mb-4">
+                          <strong className="text-slate-800 block mb-1">Evaluator Remarks:</strong>
+                          "{resItem.remarks}"
+                        </div>
                       </div>
 
-                      <h3 className="text-lg font-black text-[#0a2968] mb-2 leading-tight">
-                        {resItem.planTitle}
-                      </h3>
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={loadingPdfKey === `v_res_${resItem.id}`}
+                            onClick={() => handleViewPdf(resItem.resultPdf, `v_res_${resItem.id}`)}
+                            className="px-3 py-2 bg-blue-50 hover:bg-[#0a2968] text-[#0a2968] hover:text-white disabled:opacity-70 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                          >
+                            {loadingPdfKey === `v_res_${resItem.id}` ? (
+                              <>
+                                <Loader2 size={14} className="animate-spin text-[#EF961D]" /> Opening...
+                              </>
+                            ) : (
+                              <>
+                                <FileCheck size={14} /> View Evaluated PDF
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={loadingPdfKey === `p_res_${resItem.id}`}
+                            onClick={() => handlePrintPdf(resItem.resultPdf, `p_res_${resItem.id}`)}
+                            className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-70 rounded-xl text-xs font-bold flex items-center gap-1 transition-all border border-slate-200 cursor-pointer"
+                            title="Print PDF"
+                          >
+                            {loadingPdfKey === `p_res_${resItem.id}` ? (
+                              <>
+                                <Loader2 size={13} className="animate-spin text-[#0a2968]" /> Printing...
+                              </>
+                            ) : (
+                              <>
+                                <Printer size={13} /> Print
+                              </>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={loadingPdfKey === `d_res_${resItem.id}`}
+                            onClick={() => handleDownloadPdf(resItem.resultPdf, resItem.planTitle || "Evaluated_Result", `d_res_${resItem.id}`)}
+                            className="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 disabled:opacity-70 rounded-xl text-xs font-bold transition-all border border-slate-200 cursor-pointer flex items-center gap-1"
+                            title="Download PDF"
+                          >
+                            {loadingPdfKey === `d_res_${resItem.id}` ? (
+                              <Loader2 size={13} className="animate-spin text-slate-700" />
+                            ) : (
+                              <Download size={13} />
+                            )}
+                          </button>
+                        </div>
 
-                      <p className="text-xs text-slate-500 font-semibold mb-3">
-                        Student: <strong className="text-slate-800">{resItem.studentEmail}</strong>
-                      </p>
-
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 text-xs text-slate-600 font-semibold mb-4">
-                        <strong className="text-slate-800 block mb-1">Evaluator Remarks:</strong>
-                        "{resItem.remarks}"
+                        <button
+                          onClick={() => handleDeleteResult(resItem.id)}
+                          className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+                          title="Delete Result"
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     </div>
-
-                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-                      <a
-                        href={resItem.resultPdf}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="px-3 py-2 bg-blue-50 hover:bg-[#0a2968] text-[#0a2968] hover:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5"
-                      >
-                        <FileCheck size={14} /> View Evaluated PDF
-                      </a>
-
-                      <button
-                        onClick={() => handleDeleteResult(resItem.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
-                        title="Delete Result"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {renderPaginationBar(resPage, resultsList.length, 6, setResPage)}
+              </>
             )}
           </div>
         )}
@@ -2541,122 +2887,125 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                 No Daily Mains packages found. Click "Create Daily Mains Package" to create one.
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                {dailyMainsList.map((item, index) => (
-                  <div
-                    key={item._id || item.id || index}
-                    className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden p-6 relative"
-                  >
-                    {/* Badge */}
-                    <div className="flex justify-between items-start mb-4">
-                      <span className="px-3 py-1 bg-amber-50 text-amber-700 font-black text-xs rounded-lg uppercase tracking-wider border border-amber-200">
-                        {item.category || "Daily Mains"} • {item.paperTag || "30-Day Program"}
-                      </span>
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${item.published ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
-                        {item.published ? "Active" : "Hidden"}
-                      </span>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xl font-extrabold text-[#0a2968] mb-2 leading-tight">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs text-slate-500 font-semibold line-clamp-2 mb-4">
-                        {item.description}
-                      </p>
-
-                      {/* Pricing */}
-                      <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 mb-4 flex items-baseline gap-2">
-                        <span className="text-2xl font-black text-[#0a2968]">
-                          ₹{item.finalPrice?.toLocaleString("en-IN")}
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                  {dailyMainsList.slice((dmPage - 1) * 6, dmPage * 6).map((item, index) => (
+                    <div
+                      key={item._id || item.id || index}
+                      className="bg-white rounded-3xl border border-slate-200/90 shadow-sm hover:shadow-xl transition-all flex flex-col justify-between overflow-hidden p-6 relative"
+                    >
+                      {/* Badge */}
+                      <div className="flex justify-between items-start mb-4">
+                        <span className="px-3 py-1 bg-amber-50 text-amber-700 font-black text-xs rounded-lg uppercase tracking-wider border border-amber-200">
+                          {item.category || "Daily Mains"} • {item.paperTag || "30-Day Program"}
                         </span>
-                        {item.mrpPrice > item.finalPrice && (
-                          <span className="text-xs font-bold text-slate-400 line-through">
-                            ₹{item.mrpPrice?.toLocaleString("en-IN")}
+                        <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${item.published ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-slate-100 text-slate-400 border border-slate-200'}`}>
+                          {item.published ? "Active" : "Hidden"}
+                        </span>
+                      </div>
+
+                      <div>
+                        <h3 className="text-xl font-extrabold text-[#0a2968] mb-2 leading-tight">
+                          {item.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 font-semibold line-clamp-2 mb-4">
+                          {item.description}
+                        </p>
+
+                        {/* Pricing */}
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-150 mb-4 flex items-baseline gap-2">
+                          <span className="text-2xl font-black text-[#0a2968]">
+                            ₹{item.finalPrice?.toLocaleString("en-IN")}
                           </span>
-                        )}
-                        <span className="text-[11px] text-amber-600 font-extrabold ml-auto">{item.duration || "30 Days"}</span>
+                          {item.mrpPrice > item.finalPrice && (
+                            <span className="text-xs font-bold text-slate-400 line-through">
+                              ₹{item.mrpPrice?.toLocaleString("en-IN")}
+                            </span>
+                          )}
+                          <span className="text-[11px] text-amber-600 font-extrabold ml-auto">{item.duration || "30 Days"}</span>
+                        </div>
+
+                        {/* Features Preview */}
+                        <div className="space-y-1.5 mb-6">
+                          {item.features && item.features.slice(0, 3).map((f, fIdx) => (
+                            <div key={fIdx} className="flex items-center gap-2 text-xs font-bold text-slate-700 truncate">
+                              <CheckCircle2 size={14} className="text-[#EF961D] shrink-0" />
+                              <span className="truncate">{f}</span>
+                            </div>
+                          ))}
+                          {item.features && item.features.length > 3 && (
+                            <span className="text-[11px] font-bold text-slate-400 pl-5">+ {item.features.length - 3} more features</span>
+                          )}
+                        </div>
                       </div>
 
-                      {/* Features Preview */}
-                      <div className="space-y-1.5 mb-6">
-                        {item.features && item.features.slice(0, 3).map((f, fIdx) => (
-                          <div key={fIdx} className="flex items-center gap-2 text-xs font-bold text-slate-700 truncate">
-                            <CheckCircle2 size={14} className="text-[#EF961D] shrink-0" />
-                            <span className="truncate">{f}</span>
-                          </div>
-                        ))}
-                        {item.features && item.features.length > 3 && (
-                          <span className="text-[11px] font-bold text-slate-400 pl-5">+ {item.features.length - 3} more features</span>
-                        )}
-                      </div>
-                    </div>
+                      {/* Action Bar */}
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                        <button
+                          onClick={() => {
+                            setEditingDailyMains(item);
+                            setDmTitle(item.title);
+                            setDmCategory(item.category || "Daily Mains");
+                            setDmPaperTag(item.paperTag || "30-Day Program");
+                            setDmDescription(item.description || "");
+                            setDmFeatures(Array.isArray(item.features) ? item.features.join("\n") : "");
+                            setDmMrpPrice(item.mrpPrice || 9999);
+                            setDmFinalPrice(item.finalPrice || 5999);
+                            setDmDuration(item.duration || "30 Days Program");
+                            setDmBadge(item.badge || "30 Days Challenge");
+                            setDmPurchaseUrl(item.purchaseUrl || "/daily-mains-writing");
+                            setDmPlanPdf(item.planPdf || "");
+                            setDmPlanPdfTitle(item.planPdfTitle || "30-Day Mains Micro-Topics & Schedule Guide PDF");
+                            setDmIsDayWiseSchedule(item.isDayWiseSchedule !== undefined ? item.isDayWiseSchedule : true);
+                            setDmTotalDays(item.totalDays || 30);
+                            setDmTestsList(
+                              Array.isArray(item.tests) && item.tests.length > 0
+                                ? item.tests.map((t, i) => ({
+                                    id: t.id || `dm-test-${i}`,
+                                    day: t.day || i + 1,
+                                    testTitle: t.testName || t.testTitle || `Day ${i + 1}: Mains Question Paper`,
+                                    questionPdf: t.questionPdf || "",
+                                    textNote: t.textNote || ""
+                                  }))
+                                : Array.from({ length: 30 }, (_, i) => ({
+                                    id: `daily-d${i + 1}`,
+                                    day: i + 1,
+                                    testTitle: `Day ${i + 1}: Mains Question Paper & Micro-Topic Practice`,
+                                    questionPdf: "",
+                                    textNote: ""
+                                  }))
+                            );
+                            setDmPublished(item.published !== undefined ? item.published : true);
+                            setShowDailyMainsForm(true);
+                          }}
+                          className="px-4 py-2 bg-amber-50 hover:bg-[#0a2968] hover:text-white rounded-xl text-xs font-extrabold text-[#0a2968] transition-colors flex items-center gap-1.5 cursor-pointer border border-amber-100"
+                        >
+                          <Edit2 size={14} /> Edit Package
+                        </button>
 
-                    {/* Action Bar */}
-                    <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                      <button
-                        onClick={() => {
-                          setEditingDailyMains(item);
-                          setDmTitle(item.title);
-                          setDmCategory(item.category || "Daily Mains");
-                          setDmPaperTag(item.paperTag || "30-Day Program");
-                          setDmDescription(item.description || "");
-                          setDmFeatures(Array.isArray(item.features) ? item.features.join("\n") : "");
-                          setDmMrpPrice(item.mrpPrice || 9999);
-                          setDmFinalPrice(item.finalPrice || 5999);
-                          setDmDuration(item.duration || "30 Days Program");
-                          setDmBadge(item.badge || "30 Days Challenge");
-                          setDmPurchaseUrl(item.purchaseUrl || "/daily-mains-writing");
-                          setDmPlanPdf(item.planPdf || "");
-                          setDmPlanPdfTitle(item.planPdfTitle || "30-Day Mains Micro-Topics & Schedule Guide PDF");
-                          setDmIsDayWiseSchedule(item.isDayWiseSchedule !== undefined ? item.isDayWiseSchedule : true);
-                          setDmTotalDays(item.totalDays || 30);
-                          setDmTestsList(
-                            Array.isArray(item.tests) && item.tests.length > 0
-                              ? item.tests.map((t, i) => ({
-                                  id: t.id || `dm-test-${i}`,
-                                  day: t.day || i + 1,
-                                  testTitle: t.testName || t.testTitle || `Day ${i + 1}: Mains Question Paper`,
-                                  questionPdf: t.questionPdf || "",
-                                  textNote: t.textNote || ""
-                                }))
-                              : Array.from({ length: 30 }, (_, i) => ({
-                                  id: `daily-d${i + 1}`,
-                                  day: i + 1,
-                                  testTitle: `Day ${i + 1}: Mains Question Paper & Micro-Topic Practice`,
-                                  questionPdf: "",
-                                  textNote: ""
-                                }))
-                          );
-                          setDmPublished(item.published !== undefined ? item.published : true);
-                          setShowDailyMainsForm(true);
-                        }}
-                        className="px-4 py-2 bg-amber-50 hover:bg-[#0a2968] hover:text-white rounded-xl text-xs font-extrabold text-[#0a2968] transition-colors flex items-center gap-1.5 cursor-pointer border border-amber-100"
-                      >
-                        <Edit2 size={14} /> Edit Package
-                      </button>
-
-                      <button
-                        onClick={async () => {
-                          const dmId = item._id || item.id;
-                          if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
-                            try {
-                              await deleteDailyMains(dmId);
-                              fetchDailyMains();
-                            } catch (err) {
-                              alert("Failed to delete Daily Mains package.");
+                        <button
+                          onClick={async () => {
+                            const dmId = item._id || item.id;
+                            if (window.confirm(`Are you sure you want to delete "${item.title}"?`)) {
+                              try {
+                                await deleteDailyMains(dmId);
+                                fetchDailyMains();
+                              } catch (err) {
+                                alert("Failed to delete Daily Mains package.");
+                              }
                             }
-                          }
-                        }}
-                        className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
-                        title="Delete Package"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                          }}
+                          className="p-2 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-xl transition-colors cursor-pointer"
+                          title="Delete Package"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+                {renderPaginationBar(dmPage, dailyMainsList.length, 6, setDmPage)}
+              </>
             )}
           </div>
         )}
@@ -2925,35 +3274,35 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   />
                 </div>
 
-                {/* GENERAL / PROGRAM OVERVIEW PDF SECTION */}
+                {/* GENERAL / PROGRAM OVERVIEW PDF SECTION (OPTIONAL) */}
                 <div className="md:col-span-2 bg-blue-50/60 border border-blue-200 p-5 rounded-2xl space-y-4">
                   <h3 className="text-sm font-black text-[#0a2968] flex items-center gap-2">
-                    <FileText size={18} className="text-[#EF961D]" /> Course Overview PDF (Syllabus / Guidance Guide)
+                    <FileText size={18} className="text-[#EF961D]" /> Course Overview PDF (Optional)
                   </h3>
 
                   <div>
                     <label className="block text-xs font-extrabold text-slate-700 uppercase mb-1">
-                      PDF Document Title (Shown in Student Dashboard)
+                      PDF Document Title (Optional)
                     </label>
                     <input
                       type="text"
                       value={evalPlanPdfTitle}
                       onChange={(e) => setEvalPlanPdfTitle(e.target.value)}
-                      placeholder="e.g. Program Syllabus & Micro-Topics Overview PDF"
+                      placeholder="e.g. Program Syllabus & Overview PDF (Optional)"
                       className="w-full bg-white border border-slate-300 focus:border-[#0a2968] rounded-xl px-4 py-2.5 text-slate-800 text-sm font-semibold outline-none"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-extrabold text-slate-700 uppercase mb-1">
-                      PDF File URL / Upload
+                      PDF File URL / Upload (Optional)
                     </label>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={evalPlanPdf}
                         onChange={(e) => setEvalPlanPdf(e.target.value)}
-                        placeholder="e.g. https://example.com/syllabus.pdf or /docs/plan.pdf"
+                        placeholder="Optional - Leave blank if not attaching initial overview PDF"
                         className="flex-grow bg-white border border-slate-300 focus:border-[#0a2968] rounded-xl px-4 py-2.5 text-slate-800 text-sm font-semibold outline-none"
                       />
                       <label className={`px-4 py-2.5 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl font-extrabold text-xs flex items-center gap-1.5 cursor-pointer shrink-0 transition-colors shadow-xs ${isUploadingEvalPlanPdf ? 'opacity-75 pointer-events-none' : ''}`}>
@@ -2993,71 +3342,15 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   </div>
                 </div>
 
-                {/* 30-DAY DRIP / DAY-WISE SCHEDULE TOGGLE BOX (BRAND THEME COLOR SYSTEM) */}
-                <div className="md:col-span-2 bg-gradient-to-r from-blue-50/90 via-slate-50 to-blue-50/80 border border-blue-200/90 p-5 rounded-2xl space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Sparkles size={18} className="text-[#EF961D]" />
-                        <h3 className="text-sm font-black text-[#0a2968]">30-Day Day-wise Drip Schedule Mode</h3>
-                      </div>
-                      <p className="text-[11px] text-slate-600 font-semibold mt-0.5">
-                        Enable to release 1 test/PDF daily starting from student purchase date. Day 2 unlocks ONLY after Day 1 submission!
-                      </p>
-                    </div>
-
-                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                      <input
-                        type="checkbox"
-                        checked={evalIsDayWiseSchedule}
-                        onChange={(e) => setEvalIsDayWiseSchedule(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0a2968]"></div>
-                      <span className="ml-3 text-xs font-black text-[#0a2968]">
-                        {evalIsDayWiseSchedule ? "ACTIVE (30 Days Drip)" : "Disabled"}
-                      </span>
-                    </label>
-                  </div>
-
-                  {evalIsDayWiseSchedule && (
-                    <div className="pt-3 border-t border-blue-200/80 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-200">
-                      <div>
-                        <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-1">Total Days in Plan</label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="90"
-                          value={evalTotalDays}
-                          onChange={(e) => setEvalTotalDays(e.target.value)}
-                          className="w-full bg-white border border-blue-300 focus:border-[#0a2968] rounded-xl px-4 py-2 text-slate-800 text-xs font-bold outline-none"
-                        />
-                      </div>
-
-                      <div className="flex items-end">
-                        <button
-                          type="button"
-                          onClick={handleGenerate30DaysSchedule}
-                          className="w-full py-2.5 bg-[#0a2968] hover:bg-[#EF961D] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer uppercase tracking-wider"
-                        >
-                          <Sparkles size={14} className="text-[#EF961D]" /> Auto-Generate {evalTotalDays || 30} Days Schedule
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
                 {/* DYNAMIC TESTS BUILDER SECTION */}
                 <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-black text-[#0a2968]">
-                        Dynamic Test Series Builder ({evalTestsList.length} Items / Days)
+                        Dynamic Test Series Builder ({evalTestsList.length} Tests)
                       </h3>
                       <p className="text-[11px] text-slate-500 font-semibold">
-                        {evalIsDayWiseSchedule
-                          ? "Day-wise daily content & question PDFs. User sees Day 1 on purchase date, Day 2 opens after Day 1 submission."
-                          : "Add test titles & question PDFs test-by-test. Admin can add more tests anytime later!"}
+                        Add test titles & attach question PDFs test-by-test. Admin can add more tests anytime.
                       </p>
                     </div>
                     <button
@@ -3065,7 +3358,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                       onClick={handleAddTestItem}
                       className="px-4 py-2 bg-[#0a2968] hover:bg-[#EF961D] text-white text-xs font-extrabold rounded-xl transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
                     >
-                      <Plus size={15} /> Add New {evalIsDayWiseSchedule ? "Day" : "Test"}
+                      <Plus size={15} /> Add New Test
                     </button>
                   </div>
 
@@ -3075,13 +3368,8 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-extrabold text-[#0a2968] bg-blue-50 px-2.5 py-1 rounded-lg border border-blue-100">
-                              {evalIsDayWiseSchedule ? `Day ${testItem.day || idx + 1}` : `Test #${idx + 1}`}
+                              Test #{idx + 1}
                             </span>
-                            {evalIsDayWiseSchedule && (
-                              <span className="text-[10px] font-bold text-slate-400">
-                                Sequential Lock Active
-                              </span>
-                            )}
                           </div>
                           <button
                             type="button"
@@ -3094,28 +3382,15 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                          {evalIsDayWiseSchedule && (
-                            <div className="md:col-span-3">
-                              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Day Number</label>
-                              <input
-                                type="number"
-                                min="1"
-                                value={testItem.day || idx + 1}
-                                onChange={(e) => handleUpdateTestItem(idx, 'day', Number(e.target.value))}
-                                className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-bold outline-none"
-                              />
-                            </div>
-                          )}
-
-                          <div className={evalIsDayWiseSchedule ? "md:col-span-9" : "md:col-span-6"}>
+                          <div className="md:col-span-12">
                             <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">
-                              {evalIsDayWiseSchedule ? "Day Topic / Test Title" : "Test Title"}
+                              Test Title
                             </label>
                             <input
                               type="text"
                               value={testItem.testTitle}
                               onChange={(e) => handleUpdateTestItem(idx, 'testTitle', e.target.value)}
-                              placeholder={`e.g. Day ${idx + 1}: Mains Question Paper`}
+                              placeholder={`e.g. Test ${idx + 1}: Modern Indian History & Freedom Struggle`}
                               className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
                             />
                           </div>
@@ -3155,7 +3430,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                                           try {
                                             const cloudinaryUrl = await uploadFileToCloudinary(file, 'test_question_pdfs');
                                             handleUpdateTestItem(idx, 'questionPdf', cloudinaryUrl);
-                                            alert(`✅ Question Paper PDF for Day/Test #${idx + 1} uploaded to Cloudinary!`);
+                                            alert(`✅ Question Paper PDF for Test #${idx + 1} uploaded to Cloudinary!`);
                                           } catch (err) {
                                             console.error(err);
                                             alert("❌ Upload failed.");
@@ -3171,18 +3446,16 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                             </div>
                           </div>
 
-                          {evalIsDayWiseSchedule && (
-                            <div className="md:col-span-12">
-                              <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Day Text Note / Instructions (Optional)</label>
-                              <input
-                                type="text"
-                                value={testItem.textNote || ""}
-                                onChange={(e) => handleUpdateTestItem(idx, 'textNote', e.target.value)}
-                                placeholder="Instructions or topic notes for student for this day..."
-                                className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
-                              />
-                            </div>
-                          )}
+                          <div className="md:col-span-12">
+                            <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1">Test Notes / Syllabus Scope (Optional)</label>
+                            <input
+                              type="text"
+                              value={testItem.textNote || ""}
+                              onChange={(e) => handleUpdateTestItem(idx, 'textNote', e.target.value)}
+                              placeholder="Instructions or topic notes for students for this test..."
+                              className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] rounded-lg px-3 py-2 text-slate-800 text-xs font-semibold outline-none"
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -3917,6 +4190,61 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* GLOBAL ADMIN PDF PREVIEW MODAL */}
+      {adminPreviewPdf && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-5xl max-h-[92vh] flex flex-col overflow-hidden text-slate-800">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-[#0a2968] text-white flex items-center justify-center shrink-0">
+                  <FileText size={20} className="text-[#EF961D]" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold text-[#0a2968]">
+                    {adminPreviewPdf.title || "PDF Document Viewer"}
+                  </h3>
+                  <span className="text-xs font-semibold text-slate-500">iTopper Admin Document Preview</span>
+                </div>
+              </div>
+
+              {/* Header Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePrintPdf(adminPreviewPdf.url)}
+                  className="px-3.5 py-2 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                >
+                  <Printer size={14} /> Print (Ctrl+P)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDownloadPdf(adminPreviewPdf.url, adminPreviewPdf.title)}
+                  className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Download size={14} /> Download
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdminPreviewPdf(null)}
+                  className="p-2 bg-slate-200 hover:bg-red-500 hover:text-white rounded-full text-slate-700 transition-colors cursor-pointer"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body - PDF Iframe Viewer */}
+            <div className="flex-1 bg-slate-900 p-2 min-h-[500px]">
+              <iframe
+                src={adminPreviewPdf.url}
+                title="Admin PDF Document"
+                className="w-full h-full min-h-[500px] rounded-2xl border-0 bg-white"
+              />
             </div>
           </div>
         </div>

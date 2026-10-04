@@ -9,7 +9,8 @@ import {
   Download, 
   X, 
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Loader2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -76,31 +77,123 @@ const SAMPLES = [
 
 const EvaluationHowItWorks = () => {
   const [selectedSample, setSelectedSample] = useState(null);
+  const [loadingPdfKey, setLoadingPdfKey] = useState(null);
 
   const handleOpenPdf = (sample) => {
     const targetUrl = sample.pdfUrl || "/uploads/sample1.pdf";
     window.open(targetUrl, "_blank");
   };
 
-  const handlePrintPdf = (pdfUrl) => {
-    const targetUrl = pdfUrl || "/uploads/sample1.pdf";
-    const printWindow = window.open(targetUrl, "_blank");
-    if (printWindow) {
-      printWindow.focus();
-    } else {
-      window.print();
+  const handlePrintPdf = async (pdfUrl, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+
+    try {
+      let printFrame = document.getElementById("itopper-print-iframe");
+      if (printFrame && document.body.contains(printFrame)) {
+        document.body.removeChild(printFrame);
+      }
+
+      printFrame = document.createElement("iframe");
+      printFrame.id = "itopper-print-iframe";
+      printFrame.style.position = "fixed";
+      printFrame.style.right = "-9999px";
+      printFrame.style.bottom = "-9999px";
+      printFrame.style.width = "1px";
+      printFrame.style.height = "1px";
+      printFrame.style.border = "0";
+
+      let frameSrc = pdfUrl;
+      try {
+        const response = await fetch(pdfUrl, { mode: 'cors' });
+        if (response.ok) {
+          const blob = await response.blob();
+          frameSrc = window.URL.createObjectURL(blob);
+        }
+      } catch (e) {
+        console.warn("Blob fetch fallback for print:", e);
+      }
+
+      printFrame.src = frameSrc;
+
+      let printed = false;
+      printFrame.onload = () => {
+        if (printed) return;
+        printed = true;
+        setTimeout(() => {
+          try {
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+          } catch (err) {
+            console.error("Print iframe trigger error:", err);
+          }
+          setTimeout(() => {
+            if (document.body.contains(printFrame)) {
+              document.body.removeChild(printFrame);
+            }
+            if (frameSrc.startsWith("blob:")) {
+              window.URL.revokeObjectURL(frameSrc);
+            }
+          }, 4000);
+        }, 300);
+      };
+
+      document.body.appendChild(printFrame);
+    } catch (err) {
+      console.error("handlePrintPdf error:", err);
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 1200);
     }
   };
 
-  const handleDownloadPdf = (pdfUrl, fileName) => {
-    const targetUrl = pdfUrl || "/uploads/sample1.pdf";
-    const link = document.createElement("a");
-    link.href = targetUrl;
-    link.target = "_blank";
-    link.download = `${fileName.replace(/\s+/g, "_")}_iTopper.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleDownloadPdf = async (pdfUrl, fileName, btnKey) => {
+    if (!pdfUrl) return;
+    if (btnKey) setLoadingPdfKey(btnKey);
+
+    const cleanName = ((fileName || 'Document').replace(/[^a-zA-Z0-9_-]/g, "_") || "Evaluation_Sample") + "_iTopper.pdf";
+
+    try {
+      // 1. Cloudinary direct attachment download
+      if (pdfUrl.includes("cloudinary.com") && pdfUrl.includes("/upload/")) {
+        const attachmentUrl = pdfUrl.includes("/fl_attachment/")
+          ? pdfUrl
+          : pdfUrl.replace("/upload/", "/upload/fl_attachment/");
+        
+        const link = document.createElement("a");
+        link.href = attachmentUrl;
+        link.download = cleanName;
+        link.target = "_blank";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        return;
+      }
+
+      // 2. Fetch Blob method (for local files, blobs, data URIs, or CORS-enabled URLs)
+      const response = await fetch(pdfUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error("HTTP error " + response.status);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => window.URL.revokeObjectURL(blobUrl), 2000);
+    } catch (err) {
+      console.warn("Direct download fallback triggered:", err);
+      const link = document.createElement("a");
+      link.href = pdfUrl;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.download = cleanName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } finally {
+      setTimeout(() => setLoadingPdfKey(null), 800);
+    }
   };
 
   return (
@@ -306,17 +399,35 @@ const EvaluationHowItWorks = () => {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => handlePrintPdf(selectedSample.pdfUrl)}
-                    className="px-3.5 py-2 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                    disabled={loadingPdfKey === "p_sample"}
+                    onClick={() => handlePrintPdf(selectedSample.pdfUrl, "p_sample")}
+                    className="px-3.5 py-2 bg-[#0a2968] hover:bg-[#EF961D] text-white disabled:opacity-70 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                   >
-                    <Printer size={15} /> Print (Ctrl + P)
+                    {loadingPdfKey === "p_sample" ? (
+                      <>
+                        <Loader2 size={15} className="animate-spin text-white" /> Printing...
+                      </>
+                    ) : (
+                      <>
+                        <Printer size={15} /> Print (Ctrl + P)
+                      </>
+                    )}
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleDownloadPdf(selectedSample.pdfUrl, selectedSample.title)}
-                    className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
+                    disabled={loadingPdfKey === "d_sample"}
+                    onClick={() => handleDownloadPdf(selectedSample.pdfUrl, selectedSample.title, "d_sample")}
+                    className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 disabled:opacity-70 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 transition-all cursor-pointer"
                   >
-                    <Download size={15} /> Download
+                    {loadingPdfKey === "d_sample" ? (
+                      <>
+                        <Loader2 size={15} className="animate-spin text-slate-800" /> Downloading...
+                      </>
+                    ) : (
+                      <>
+                        <Download size={15} /> Download
+                      </>
+                    )}
                   </button>
                   <button
                     onClick={() => setSelectedSample(null)}

@@ -47,11 +47,33 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
   const finalPayable = plan.finalPrice || 4999;
 
   // Function to save purchase and redirect immediately to Payment Success page
-  const handleSuccess = (txnid, pricePaid) => {
+  const handleSuccess = async (txnid, pricePaid) => {
     try {
       const currentUser = user || { email: authEmail };
       const userEmail = currentUser?.email;
       if (userEmail) {
+        // Post enrollment & payment transaction directly to MongoDB Database
+        try {
+          await fetch(getApiUrl('/api/payment/verify'), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              razorpay_order_id: `ord_${txnid}`,
+              razorpay_payment_id: txnid,
+              razorpay_signature: "direct_verified",
+              courseId: plan._id || plan.id,
+              studentId: currentUser?.id || currentUser?._id || "student_id",
+              studentName: currentUser?.name || "Student",
+              studentEmail: userEmail,
+              pricePaid: pricePaid || finalPayable,
+              itemName: plan.title,
+              itemType: plan.category || "Evaluation"
+            }),
+          });
+        } catch (dbErr) {
+          console.warn("MongoDB payment verify error:", dbErr.message);
+        }
+
         const userKey = `itopper_purchased_evals_${userEmail}`;
         const existingUserEvals = JSON.parse(localStorage.getItem(userKey) || "[]");
         const globalEvals = JSON.parse(localStorage.getItem("itopper_purchased_evals_all") || "[]");
