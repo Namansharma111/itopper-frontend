@@ -19,11 +19,20 @@ const StudentDashboard = () => {
   const navigate = useNavigate();
 
   const [purchasedEvaluations, setPurchasedEvaluations] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedCourseId, setSelectedCourseId] = useState(null);
   const [uploadedAnswerSheets, setUploadedAnswerSheets] = useState({});
   const [evaluationResults, setEvaluationResults] = useState([]);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [uploadingTestKey, setUploadingTestKey] = useState(null);
+
+  // Light-themed Toast state
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'info') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   // Mobile navigation mode: 'list' (show all courses) or 'details' (show active course tests)
   const [mobileViewMode, setMobileViewMode] = useState('list');
@@ -42,6 +51,7 @@ const StudentDashboard = () => {
 
   // Load purchased evaluation plans for this student (Syncs MongoDB DB + Local Storage)
   const loadPurchasedEvaluations = async () => {
+    setIsLoading(true);
     try {
       if (!user?.email) {
         setPurchasedEvaluations([]);
@@ -129,19 +139,30 @@ const StudentDashboard = () => {
     } catch (e) {
       console.error("Error loading purchased evaluations:", e);
       setPurchasedEvaluations([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   // Load uploaded answer sheets (keyed by `${planId}_${testId}`)
   const loadUploadedAnswerSheets = () => {
     try {
-      const userEmail = user?.email || 'student@itopper.com';
+      const userEmail = user?.email?.toLowerCase() || 'student@itopper.com';
       const savedSheets = localStorage.getItem(`itopper_answer_sheets_${userEmail}`);
-      if (savedSheets) {
-        setUploadedAnswerSheets(JSON.parse(savedSheets));
-      } else {
-        setUploadedAnswerSheets({});
-      }
+      let sheetsObj = savedSheets ? JSON.parse(savedSheets) : {};
+
+      // Also merge any submissions stored in global "itopper_all_student_submissions"
+      const allSubmissions = JSON.parse(localStorage.getItem("itopper_all_student_submissions") || "[]");
+      allSubmissions.forEach(sub => {
+        if (sub.studentEmail && sub.studentEmail.toLowerCase() === userEmail) {
+          const key = `${sub.planId}_${sub.testId}`;
+          if (!sheetsObj[key]) {
+            sheetsObj[key] = sub;
+          }
+        }
+      });
+
+      setUploadedAnswerSheets(sheetsObj);
     } catch (e) {
       console.error("Error loading answer sheets:", e);
     }
@@ -231,10 +252,10 @@ const StudentDashboard = () => {
         console.error("Error syncing submission to admin storage:", e);
       }
 
-      alert(`✅ Answer Sheet "${file.name}" uploaded to Cloudinary & submitted for "${test.testName || test.testTitle}"! Sent to faculty for evaluation.`);
+      showToast("Answer sheet uploaded & submitted!", "success");
     } catch (error) {
       console.error("Upload error:", error);
-      alert("❌ Upload failed. Please try again.");
+      showToast("Upload failed. Please try again.", "error");
     } finally {
       setIsUploadingFile(false);
       setUploadingTestKey(null);
@@ -313,17 +334,26 @@ const StudentDashboard = () => {
     }
   };
 
-  // Print PDF Helper (Triggers Native Browser Print Dialog in SAME tab without opening new tab)
+  // Print PDF Helper (Triggers Native Browser Print Dialog in SAME tab)
   const handlePrintPdf = async (pdfUrl, btnKey) => {
     if (!pdfUrl) return;
     if (btnKey) setLoadingPdfKey(btnKey);
 
     try {
+      // Check if mobile browser where iframe printing is blocked
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      if (isMobile) {
+        window.open(pdfUrl, '_blank');
+        showToast("PDF opened! Click Download PDF if print fails.", "info");
+        return;
+      }
+
       let printFrame = document.getElementById("itopper-print-iframe");
       if (printFrame && document.body.contains(printFrame)) {
         document.body.removeChild(printFrame);
       }
 
+      // Create hidden iframe & APPEND TO BODY FIRST so DOM events bind correctly
       printFrame = document.createElement("iframe");
       printFrame.id = "itopper-print-iframe";
       printFrame.style.position = "fixed";
@@ -332,7 +362,31 @@ const StudentDashboard = () => {
       printFrame.style.width = "1px";
       printFrame.style.height = "1px";
       printFrame.style.border = "0";
+      document.body.appendChild(printFrame);
 
+      let printed = false;
+      const doPrint = () => {
+        if (printed) return;
+        printed = true;
+        try {
+          printFrame.contentWindow.focus();
+          printFrame.contentWindow.print();
+        } catch (err) {
+          console.error("Print iframe trigger error:", err);
+          window.open(pdfUrl, '_blank');
+        }
+        setTimeout(() => {
+          if (document.body.contains(printFrame)) {
+            document.body.removeChild(printFrame);
+          }
+        }, 4000);
+      };
+
+      printFrame.onload = () => {
+        setTimeout(doPrint, 300);
+      };
+
+      // Fetch blob or direct src, then set src to trigger onload
       let frameSrc = pdfUrl;
       try {
         const response = await fetch(pdfUrl, { mode: 'cors' });
@@ -346,33 +400,11 @@ const StudentDashboard = () => {
 
       printFrame.src = frameSrc;
 
-      let printed = false;
-      printFrame.onload = () => {
-        if (printed) return;
-        printed = true;
-        setTimeout(() => {
-          try {
-            printFrame.contentWindow.focus();
-            printFrame.contentWindow.print();
-          } catch (err) {
-            console.error("Print iframe trigger error:", err);
-          }
-          setTimeout(() => {
-            if (document.body.contains(printFrame)) {
-              document.body.removeChild(printFrame);
-            }
-            if (frameSrc.startsWith("blob:")) {
-              window.URL.revokeObjectURL(frameSrc);
-            }
-          }, 4000);
-        }, 300);
-      };
-
-      document.body.appendChild(printFrame);
     } catch (err) {
       console.error("handlePrintPdf error:", err);
+      window.open(pdfUrl, '_blank');
     } finally {
-      setTimeout(() => setLoadingPdfKey(null), 1200);
+      setTimeout(() => setLoadingPdfKey(null), 1000);
     }
   };
 
@@ -422,16 +454,13 @@ const StudentDashboard = () => {
       <Navigation theme="light" />
 
       {/* TOP HEADER BANNER */}
-      <section className="bg-white border-b border-slate-200 pt-6 sm:pt-10 pb-6 px-4 sm:px-6">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
+      <section className="bg-white border-b border-slate-200 pt-5 sm:pt-8 pb-5 px-4 sm:px-6">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-[#0a2968] rounded-full text-xs font-extrabold uppercase tracking-wider mb-2 border border-blue-100">
-              <Sparkles size={14} className="text-[#EF961D]" /> Student Portal & Evaluation Dashboard
-            </div>
-            <h1 className="text-3xl sm:text-4xl font-black text-[#0a2968] tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-black text-[#0a2968] tracking-tight">
               Welcome, <span className="text-[#EF961D]">{user?.name ? user.name.split(' ')[0] : 'Aspirant'}</span> 👋🏻
             </h1>
-            <p className="text-slate-500 text-sm font-semibold mt-1">
+            <p className="text-slate-500 text-xs font-semibold mt-1">
               Select your enrolled course to access syllabus PDFs, submit handwritten answer copies test-by-test, and view evaluated results.
             </p>
           </div>
@@ -455,7 +484,13 @@ const StudentDashboard = () => {
 
       {/* MAIN TWO-COLUMN DASHBOARD LAYOUT */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 flex-grow w-full">
-        {purchasedEvaluations.length === 0 ? (
+        {isLoading ? (
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center shadow-xs flex flex-col items-center justify-center min-h-[350px] space-y-3 animate-in fade-in duration-200">
+            <Loader2 size={36} className="animate-spin text-[#0a2968]" />
+            <h3 className="text-base font-bold text-[#0a2968]">Loading Your Enrolled Courses...</h3>
+            <p className="text-xs text-slate-400 font-medium">Synchronizing syllabus PDFs, test papers & evaluated copies</p>
+          </div>
+        ) : purchasedEvaluations.length === 0 ? (
           <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center shadow-xs">
             <FileCheck size={48} className="mx-auto text-slate-300 mb-4" />
             <h3 className="text-2xl font-black text-[#0a2968] mb-2">No Enrolled Evaluation Plans</h3>
@@ -526,228 +561,190 @@ const StudentDashboard = () => {
             </div>
 
             {/* ================= RIGHT MAIN PANEL: TEST SERIES & TOPICS ================= */}
-            {/* On Mobile: Hidden when mobileViewMode === 'list' */}
-            <div className={`lg:col-span-8 bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 shadow-sm space-y-6 ${mobileViewMode === 'list' ? 'hidden lg:block' : 'block'}`}>
+            <div className={`lg:col-span-8 bg-white rounded-2xl border border-slate-200/90 p-3.5 sm:p-6 shadow-2xs space-y-5 ${mobileViewMode === 'list' ? 'hidden lg:block' : 'block'}`}>
               
               {/* Mobile Back Button */}
-              <div className="lg:hidden pb-2">
+              <div className="lg:hidden pb-1">
                 <button
                   onClick={() => setMobileViewMode('list')}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-[#0a2968] font-extrabold text-xs rounded-xl border border-slate-200 transition-all"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-[#0a2968] font-bold text-xs rounded-lg border border-slate-200 transition-all"
                 >
-                  <ArrowLeft size={15} /> Back to All Enrolled Courses List
+                  <ArrowLeft size={14} /> Back to Courses
                 </button>
               </div>
 
               {/* Selected Course Header */}
               {selectedCourse && (
-                <div className="space-y-6">
-                  <div className="pb-6 border-b border-slate-100 space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <span className="px-2.5 py-1 bg-blue-50 text-[#0a2968] font-black text-xs rounded-lg uppercase border border-blue-100">
-                          {selectedCourse.paperTag || selectedCourse.category || "GS Paper"}
-                        </span>
-                        <span className="px-2.5 py-1 bg-emerald-50 text-emerald-700 font-bold text-xs rounded-full border border-emerald-200">
-                          Active Subscription
-                        </span>
+                <div className="space-y-5">
+                  <div className="pb-4 border-b border-slate-100 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="px-2 py-0.5 bg-blue-50 text-[#0a2968] font-bold text-[10px] rounded uppercase border border-blue-100">
+                            {selectedCourse.paperTag || selectedCourse.category || "GS Paper"}
+                          </span>
+                          <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 font-bold text-[10px] rounded-full border border-emerald-200">
+                            Active Subscription
+                          </span>
+                        </div>
+                        <h2 className="text-xl sm:text-2xl font-bold text-[#0a2968] leading-tight">
+                          {selectedCourse.title}
+                        </h2>
+                        <p className="text-slate-500 text-xs font-medium mt-1">
+                          {selectedCourse.description}
+                        </p>
                       </div>
-                      <h2 className="text-2xl sm:text-3xl font-black text-[#0a2968]">
-                        {selectedCourse.title}
-                      </h2>
-                      <p className="text-slate-500 text-xs sm:text-sm font-semibold mt-1">
-                        {selectedCourse.description}
-                      </p>
+
+                      <div className="text-[11px] font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shrink-0 self-start sm:self-center">
+                        Total: <strong className="text-[#0a2968] font-bold">{getCourseTests(selectedCourse).length} Papers</strong>
+                      </div>
                     </div>
 
-                    <div className="text-xs font-bold text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 shrink-0">
-                      Total Tests: <strong className="text-[#0a2968] font-black">{getCourseTests(selectedCourse).length} Tests</strong>
-                    </div>
-                  </div>
-
-                  {/* GENERAL / DEFAULT COURSE OVERVIEW PDF CARD (RIGHT BELOW DESCRIPTION LINE) */}
-                  {(selectedCourse.planPdf || selectedCourse.pdfUrl) && (
-                    <div className="mt-4 bg-gradient-to-r from-blue-50/90 via-slate-50 to-blue-50/50 border border-blue-200/90 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div className="flex items-start gap-3">
-                          <div className="w-10 h-10 rounded-xl bg-[#0a2968] text-white flex items-center justify-center shrink-0 shadow-xs">
-                            <FileText size={20} className="text-[#EF961D]" />
-                          </div>
-                          <div>
-                            <span className="px-2 py-0.5 bg-blue-100 text-[#0a2968] font-extrabold text-[10px] rounded uppercase tracking-wider">
-                              Course Overview Document
+                    {/* GENERAL / DEFAULT COURSE OVERVIEW PDF BAR (CLEAN MINIMAL INLINE ROW) */}
+                    {(selectedCourse.planPdf || selectedCourse.pdfUrl) && (
+                      <div className="mt-3 bg-slate-50 rounded-xl border border-slate-200/80 p-3 text-xs space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText size={16} className="text-[#0a2968] shrink-0" />
+                            <span className="font-bold text-slate-800 truncate">
+                              {selectedCourse.planPdfTitle || "Program Syllabus & Micro-Topics Guide PDF"}
                             </span>
-                            <h3 className="text-sm sm:text-base font-black text-[#0a2968] mt-0.5">
-                              {selectedCourse.planPdfTitle || "Program Syllabus & Micro-Topics Overview PDF"}
-                            </h3>
-                            <p className="text-slate-500 text-xs font-semibold">
-                              Read or download the program syllabus breakdown, recommended sources & structure map guide.
-                            </p>
+                          </div>
+
+                          {/* PDF Action Buttons */}
+                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                            <button
+                              type="button"
+                              disabled={loadingPdfKey === "v_overview"}
+                              onClick={() => handleViewPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, "v_overview")}
+                              className="px-2.5 py-1 bg-[#0a2968] hover:bg-[#12387a] text-white disabled:opacity-70 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                            >
+                              {loadingPdfKey === "v_overview" ? (
+                                <Loader2 size={12} className="animate-spin text-[#EF961D]" />
+                              ) : (
+                                <Eye size={12} className="text-[#EF961D]" />
+                              )}
+                              <span>View PDF</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={loadingPdfKey === "p_overview"}
+                              onClick={() => handlePrintPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, "p_overview")}
+                              className="px-2.5 py-1 bg-white hover:bg-slate-100 text-[#0a2968] disabled:opacity-70 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                              {loadingPdfKey === "p_overview" ? (
+                                <Loader2 size={12} className="animate-spin text-[#0a2968]" />
+                              ) : (
+                                <Printer size={12} />
+                              )}
+                              <span>Print</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={loadingPdfKey === "d_overview"}
+                              onClick={() => handleDownloadPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, selectedCourse.planPdfTitle || selectedCourse.title, "d_overview")}
+                              className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 disabled:opacity-70 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                            >
+                              {loadingPdfKey === "d_overview" ? (
+                                <Loader2 size={12} className="animate-spin text-slate-700" />
+                              ) : (
+                                <Download size={12} />
+                              )}
+                              <span>Download</span>
+                            </button>
                           </div>
                         </div>
 
-                        {/* PDF Action Buttons */}
-                        <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
-                          <button
-                            type="button"
-                            disabled={loadingPdfKey === "v_overview"}
-                            onClick={() => handleViewPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, "v_overview")}
-                            className="px-3.5 py-2 bg-[#0a2968] hover:bg-[#12387a] text-white disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
-                          >
-                            {loadingPdfKey === "v_overview" ? (
-                              <>
-                                <Loader2 size={15} className="animate-spin text-[#EF961D]" /> Opening...
-                              </>
-                            ) : (
-                              <>
-                                <Eye size={15} className="text-[#EF961D]" /> View PDF
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={loadingPdfKey === "p_overview"}
-                            onClick={() => handlePrintPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, "p_overview")}
-                            className="px-3 py-2 bg-white hover:bg-slate-100 text-[#0a2968] disabled:opacity-70 border border-slate-300 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                          >
-                            {loadingPdfKey === "p_overview" ? (
-                              <>
-                                <Loader2 size={15} className="animate-spin text-[#0a2968]" /> Printing...
-                              </>
-                            ) : (
-                              <>
-                                <Printer size={15} /> Print
-                              </>
-                            )}
-                          </button>
-                          <button
-                            type="button"
-                            disabled={loadingPdfKey === "d_overview"}
-                            onClick={() => handleDownloadPdf(selectedCourse.planPdf || selectedCourse.pdfUrl, selectedCourse.planPdfTitle || selectedCourse.title, "d_overview")}
-                            className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
-                          >
-                            {loadingPdfKey === "d_overview" ? (
-                              <>
-                                <Loader2 size={15} className="animate-spin text-slate-700" /> Downloading...
-                              </>
-                            ) : (
-                              <>
-                                <Download size={15} /> Download
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* PROPER INLINE EMBED PDF VIEWER */}
-                      {openInlinePdfs["overview_pdf"] && (
-                        <div className="pt-3 border-t border-blue-200/80 animate-in fade-in duration-200">
-                          <div className="bg-slate-900 rounded-2xl p-2 h-[520px] shadow-inner">
-                            <iframe
-                              src={selectedCourse.planPdf || selectedCourse.pdfUrl}
-                              title="Course Overview PDF Document"
-                              className="w-full h-full rounded-xl border-0 bg-white"
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* Calculate Course Drip & Unlock Variables */}
-                {(() => {
-                  const isDayWiseCourse = !!selectedCourse?.isDayWiseSchedule || selectedCourse?.category === 'Daily Mains';
-                  const purchaseDateStr = selectedCourse?.purchasedAt || selectedCourse?.createdAt || Date.now();
-                  const purchaseDateObj = new Date(purchaseDateStr);
-                  const nowObj = new Date();
-                  const diffTimeMs = Math.max(0, nowObj.getTime() - purchaseDateObj.getTime());
-                  const elapsedDays = Math.max(1, Math.floor(diffTimeMs / (1000 * 60 * 60 * 24)) + 1);
-
-                  const rawTestsList = getCourseTests(selectedCourse);
-
-                  const checkTestSubmitted = (testObj) => {
-                    if (!selectedCourse || !testObj) return false;
-                    const planId = selectedCourse._id || selectedCourse.id || selectedCourse.title;
-                    const testId = testObj.id || testObj.testName || testObj.testTitle;
-                    const compositeKey = `${planId}_${testId}`;
-                    const uploadedSheet = uploadedAnswerSheets[compositeKey];
-
-                    const userEmail = user?.email?.toLowerCase() || 'student@itopper.com';
-                    const testTitleStr = testObj.testName || testObj.testTitle;
-                    const personalCheckedCopy = evaluationResults.find(r => {
-                      const rEmail = (r.studentEmail || '').toLowerCase();
-                      const isTargetUser = rEmail === userEmail;
-                      const isTargetTest = (r.testName && r.testName.toLowerCase() === testTitleStr.toLowerCase()) ||
-                                           (r.planTitle && r.planTitle.toLowerCase().includes(selectedCourse.title.toLowerCase()));
-                      return isTargetUser && isTargetTest;
-                    });
-
-                    return !!uploadedSheet || !!personalCheckedCopy;
-                  };
-
-                  const displayTestsList = isDayWiseCourse
-                    ? [...rawTestsList].sort((a, b) => (a.day || 1) - (b.day || 1))
-                    : [...rawTestsList].reverse();
-
-                  const submittedCount = rawTestsList.filter(t => checkTestSubmitted(t)).length;
-                  const totalDaysCount = selectedCourse?.totalDays || rawTestsList.length || 30;
-
-                  return (
-                    <div className="space-y-6 pt-2">
-                      {/* 30-DAY DRIP COURSE PROGRESS TRACKER BANNER (BRAND THEME COLOR SYSTEM) */}
-                      {isDayWiseCourse && (
-                        <div className="bg-gradient-to-r from-[#0a2968] via-[#0f3482] to-[#0a2968] rounded-3xl p-6 sm:p-7 text-white shadow-xl border border-[#0a2968]/50 space-y-5 relative overflow-hidden">
-                          {/* Glow accent */}
-                          <div className="absolute -top-12 -right-12 w-48 h-48 bg-[#EF961D]/15 rounded-full blur-3xl pointer-events-none" />
-
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative z-10">
-                            <div>
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="px-3 py-1 bg-white/10 backdrop-blur-md text-[#EF961D] font-semibold text-[11px] rounded-full uppercase tracking-wider flex items-center gap-1.5 border border-[#EF961D]/30">
-                                  <Sparkles size={13} className="text-[#EF961D]" /> 30-Day Sequential Drip Plan
-                                </span>
-                                <span className="px-3 py-1 bg-[#EF961D] text-[#0a2968] font-semibold text-[11px] rounded-full uppercase shadow-xs">
-                                  Today is Day {elapsedDays}
-                                </span>
-                              </div>
-                              <h3 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white leading-tight">
-                                Day-Wise Answer Writing & Daily Challenge Tracker
-                              </h3>
-                              <p className="text-slate-200 text-xs font-semibold mt-1.5">
-                                Plan Purchase Date: <strong className="text-white font-semibold">{purchaseDateObj.toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })}</strong> • Day 1 = Purchase Date
-                              </p>
-                            </div>
-
-                            <div className="bg-white/10 backdrop-blur-md border border-white/20 p-4 rounded-2xl text-right shrink-0 shadow-sm">
-                              <div className="text-3xl font-semibold text-white">{submittedCount} / {totalDaysCount}</div>
-                              <div className="text-[11px] font-semibold text-[#EF961D] uppercase tracking-wider mt-0.5">Days Completed</div>
-                            </div>
-                          </div>
-
-                          {/* Progress Bar */}
-                          <div className="space-y-1.5 relative z-10">
-                            <div className="flex justify-between text-xs font-semibold text-slate-200">
-                              <span>Completion Progress</span>
-                              <span className="text-[#EF961D]">{Math.round((submittedCount / Math.max(1, totalDaysCount)) * 100)}% Submitted</span>
-                            </div>
-                            <div className="w-full h-3.5 bg-black/30 rounded-full overflow-hidden p-0.5 border border-white/20">
-                              <div
-                                className="h-full bg-gradient-to-r from-[#EF961D] to-[#f7b750] rounded-full transition-all duration-500 shadow-xs"
-                                style={{ width: `${Math.min(100, Math.round((submittedCount / Math.max(1, totalDaysCount)) * 100))}%` }}
+                        {/* INLINE EMBED PDF VIEWER */}
+                        {openInlinePdfs["overview_pdf"] && (
+                          <div className="pt-2 animate-in fade-in duration-200">
+                            <div className="bg-slate-900 rounded-xl p-1.5 h-[360px] sm:h-[480px]">
+                              <iframe
+                                src={selectedCourse.planPdf || selectedCourse.pdfUrl}
+                                title="Course Overview PDF Document"
+                                className="w-full h-full rounded-lg border-0 bg-white"
                               />
                             </div>
                           </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
 
-                          <div className="text-xs font-semibold text-slate-100 bg-white/10 backdrop-blur-md p-3.5 rounded-2xl border border-white/15 flex items-center gap-2.5 relative z-10">
-                            <ShieldAlert size={18} className="text-[#EF961D] shrink-0" />
-                            <span>
-                              <strong>Sequential Unlock Rule:</strong> Day 1 is unlocked today. Day 2 unlocks ONLY after Day 1 answer sheet is submitted AND Day 2 date arrives.
-                            </span>
+                  {/* Calculate Course Drip & Unlock Variables */}
+                  {(() => {
+                    const isDayWiseCourse = !!selectedCourse?.isDayWiseSchedule || selectedCourse?.category === 'Daily Mains';
+                    const purchaseDateStr = selectedCourse?.purchasedAt || selectedCourse?.createdAt || Date.now();
+                    const purchaseDateObj = new Date(purchaseDateStr);
+                    const nowObj = new Date();
+                    const diffTimeMs = Math.max(0, nowObj.getTime() - purchaseDateObj.getTime());
+                    const elapsedDays = Math.max(1, Math.floor(diffTimeMs / (1000 * 60 * 60 * 24)) + 1);
+
+                    const rawTestsList = getCourseTests(selectedCourse);
+
+                    const checkTestSubmitted = (testObj) => {
+                      if (!selectedCourse || !testObj) return false;
+                      const planId = selectedCourse._id || selectedCourse.id || selectedCourse.title;
+                      const testId = testObj.id || testObj.testName || testObj.testTitle;
+                      const compositeKey = `${planId}_${testId}`;
+                      const uploadedSheet = uploadedAnswerSheets[compositeKey];
+
+                      const userEmail = user?.email?.toLowerCase() || 'student@itopper.com';
+                      const testTitleStr = (testObj.testName || testObj.testTitle || '').toLowerCase().trim();
+                      const dayNum = testObj.day;
+
+                      const personalCheckedCopy = evaluationResults.find(r => {
+                        const rEmail = (r.studentEmail || '').toLowerCase();
+                        const isTargetUser = rEmail === userEmail;
+                        const rTestName = (r.testName || '').toLowerCase().trim();
+                        if (!rTestName) return false;
+
+                        const isMatchingTestName = (rTestName === testTitleStr || rTestName.includes(testTitleStr) || testTitleStr.includes(rTestName));
+                        const isMatchingDay = dayNum && (rTestName.includes(`day ${dayNum}`) || rTestName.includes(`day-${dayNum}`) || rTestName === `day ${dayNum}`);
+
+                        return isTargetUser && (isMatchingTestName || isMatchingDay);
+                      });
+
+                      return !!uploadedSheet || !!personalCheckedCopy;
+                    };
+
+                    const displayTestsList = isDayWiseCourse
+                      ? [...rawTestsList].sort((a, b) => (a.day || 1) - (b.day || 1))
+                      : [...rawTestsList].reverse();
+
+                    const submittedCount = rawTestsList.filter(t => checkTestSubmitted(t)).length;
+                    const totalDaysCount = selectedCourse?.totalDays || rawTestsList.length || 30;
+
+                    return (
+                      <div className="space-y-4 pt-1">
+                        {/* SLEEK MINIMAL PROGRESS BAR (CLEAN MODERN TRACKER) */}
+                        {isDayWiseCourse && (
+                          <div className="bg-[#0a2968] text-white rounded-xl p-4 space-y-2.5 shadow-xs">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 text-xs">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 bg-white/10 text-[#EF961D] font-bold text-[10px] rounded uppercase border border-white/15">
+                                  Today is Day {elapsedDays}
+                                </span>
+                                <span className="font-semibold text-slate-200">30-Day Drip Challenge Progress</span>
+                              </div>
+                              <span className="font-bold text-[#EF961D]">
+                                {submittedCount} / {totalDaysCount} Days Submitted ({Math.round((submittedCount / Math.max(1, totalDaysCount)) * 100)}%)
+                              </span>
+                            </div>
+
+                            <div className="w-full h-2.5 bg-black/30 rounded-full overflow-hidden p-0.5 border border-white/15">
+                              <div
+                                className="h-full bg-gradient-to-r from-[#EF961D] to-[#f7b750] rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.round((submittedCount / Math.max(1, totalDaysCount)) * 100))}%` }}
+                              />
+                            </div>
+
+                            <div className="text-[11px] text-slate-300 flex items-center gap-1.5 font-medium">
+                              <ShieldAlert size={13} className="text-[#EF961D] shrink-0" />
+                              <span>Day N unlocks after Day N-1 answer copy submission AND Day N date arrives.</span>
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        )}
 
                       {/* LIST OF TESTS INSIDE SELECTED COURSE */}
                       <div className="space-y-4">
@@ -821,233 +818,198 @@ const StudentDashboard = () => {
 
                           const questionPdf = test.questionPdf;
 
-                          // LOCKED DAY CARD RENDERING (BRAND THEME ACCORDANT)
+                          // LOCKED DAY ROW RENDERING (ULTRA-MINIMAL & CLEAN 1-LINE ROW)
                           if (!isUnlocked) {
                             return (
                               <div
                                 key={testId}
-                                className="bg-slate-50/90 border border-slate-200/90 rounded-2xl p-5 space-y-3 relative overflow-hidden transition-all shadow-2xs"
+                                className="bg-slate-50/80 border border-slate-200/70 rounded-xl p-3 flex flex-wrap sm:flex-nowrap items-center justify-between gap-2.5 transition-all text-xs"
                               >
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                                  <div className="flex items-start gap-3">
-                                    <span className="w-9 h-9 rounded-xl bg-slate-200 text-slate-500 font-black text-sm flex items-center justify-center shrink-0 border border-slate-300 shadow-2xs">
-                                      <Lock size={16} className="text-slate-500" />
-                                    </span>
-                                    <div>
-                                      <div className="flex items-center gap-2 mb-1">
-                                        <span className="px-2.5 py-0.5 bg-[#0a2968]/10 text-[#0a2968] font-black text-[10px] rounded uppercase border border-[#0a2968]/15">
-                                          Day {dayNum}
-                                        </span>
-                                        <span className="px-2.5 py-0.5 bg-[#EF961D]/15 text-[#b86b02] border border-[#EF961D]/30 font-black text-[10px] rounded-full flex items-center gap-1">
-                                          <Lock size={11} /> Locked Day
-                                        </span>
-                                      </div>
-                                      <h4 className="text-base font-extrabold text-slate-600 leading-snug">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="w-7 h-7 rounded-lg bg-slate-200/80 text-slate-400 flex items-center justify-center shrink-0">
+                                    <Lock size={14} />
+                                  </span>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-slate-400 text-[11px] shrink-0">
+                                        Day {dayNum}
+                                      </span>
+                                      <h4 className="font-semibold text-slate-600 text-xs truncate">
                                         {testTitleStr}
                                       </h4>
-                                      {test.textNote && (
-                                        <p className="text-xs text-slate-500 font-semibold mt-1">
-                                          {test.textNote}
-                                        </p>
-                                      )}
                                     </div>
-                                  </div>
-
-                                  <div className="px-3.5 py-2 bg-slate-200/80 text-slate-700 border border-slate-300/80 rounded-xl text-xs font-bold shrink-0 flex items-center gap-1.5 self-start sm:self-center shadow-2xs">
-                                    <AlertCircle size={14} className="text-[#EF961D] shrink-0" />
-                                    <span>
-                                      {!isDayArrived
-                                        ? `Unlocks on Day ${dayNum} (${dayNum - elapsedDays} day(s) left)`
-                                        : `Submit Day ${dayNum - 1} answer copy first`}
-                                    </span>
                                   </div>
                                 </div>
 
-                                <div className="p-3 bg-slate-100/90 border border-slate-200 rounded-xl text-xs font-semibold text-slate-600 flex flex-col sm:flex-row items-center justify-between gap-2">
-                                  <span className="flex items-center gap-1.5">
-                                    <Lock size={13} className="text-slate-500 shrink-0" />
+                                <div className="flex items-center gap-2 shrink-0 self-end sm:self-center text-[11px] font-semibold text-slate-400">
+                                  <span>
                                     {!isDayArrived
-                                      ? `Question Paper PDF & Answer Copy Upload will unlock on Day ${dayNum}.`
-                                      : `Question Paper PDF & Answer Copy Upload will unlock once Day ${dayNum - 1} is submitted.`}
+                                      ? `Unlocks Day ${dayNum} (${dayNum - elapsedDays}d left)`
+                                      : `Requires Day ${dayNum - 1} submission`}
                                   </span>
-                                  <button disabled className="px-4 py-1.5 bg-slate-300 text-slate-600 rounded-lg text-xs font-bold cursor-not-allowed shrink-0">
+                                  <span className="px-2 py-0.5 bg-slate-200/60 text-slate-500 rounded font-bold text-[10px]">
                                     Locked
-                                  </button>
+                                  </span>
                                 </div>
                               </div>
                             );
                           }
 
-                          // UNLOCKED ACTIVE DAY CARD RENDERING
+                          // UNLOCKED ACTIVE DAY CARD RENDERING (UN-BOXED & PROFESSIONAL)
                           return (
                             <div
                               key={testId}
-                              className={`bg-white border rounded-2xl transition-all duration-200 ${
+                              className={`bg-white border rounded-xl transition-all duration-200 ${
                                 isExpanded
-                                  ? "border-[#0a2968]/50 shadow-md ring-1 ring-[#0a2968]/10 p-5 space-y-4"
-                                  : "border-slate-200 hover:border-slate-300 p-4"
+                                  ? "border-[#0a2968]/40 shadow-xs ring-1 ring-[#0a2968]/10 p-4 space-y-4"
+                                  : "border-slate-200/90 hover:border-slate-300 p-3.5"
                               }`}
                             >
-                              {/* Top Bar / Header Clickable Row */}
+                              {/* Accordion Header Clickable Row */}
                               <div
                                 onClick={toggleAccordion}
-                                className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
+                                className="flex items-center justify-between gap-3 cursor-pointer select-none"
                               >
-                                <div className="flex items-start gap-3">
-                                  <span className="w-8 h-8 rounded-xl bg-slate-100 text-[#0a2968] font-black text-sm flex items-center justify-center shrink-0 border border-slate-200">
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <span className="w-8 h-8 rounded-lg bg-blue-50 text-[#0a2968] font-bold text-xs flex items-center justify-center shrink-0 border border-blue-100">
                                     {isDayWiseCourse ? `Day ${dayNum}` : `#${rawTestsList.length - index}`}
                                   </span>
-                                  <div>
-                                    <h4 className="text-base font-black text-slate-900 leading-snug hover:text-[#0a2968] transition-colors">
+                                  <div className="min-w-0">
+                                    <h4 className="text-sm font-bold text-slate-900 truncate hover:text-[#0a2968] transition-colors">
                                       {testTitleStr}
                                     </h4>
-                                    <span className="text-[11px] font-semibold text-slate-400">
-                                      {isDayWiseCourse ? `Day ${dayNum} Content & Answer Copy Upload` : "Paper / Test Details & Submissions"}
+                                    <span className="text-[11px] text-slate-400 font-medium hidden sm:inline-block">
+                                      {isDayWiseCourse ? `Day ${dayNum} Content & Answer Submission` : "Test Details & Submissions"}
                                     </span>
                                   </div>
                                 </div>
 
-                                {/* Status Badges & Accordion Icon */}
-                                <div className="flex items-center gap-2 shrink-0 self-start sm:self-center">
+                                {/* Status Badges & Toggle */}
+                                <div className="flex items-center gap-2 shrink-0">
                                   {personalCheckedCopy ? (
-                                    <span className="px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-300 font-extrabold text-xs rounded-full uppercase tracking-wider flex items-center gap-1 shadow-2xs">
-                                      <CheckCircle2 size={13} className="text-emerald-600" /> Evaluated ({personalCheckedCopy.score || 'Checked'})
+                                    <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[11px] rounded-full flex items-center gap-1">
+                                      <CheckCircle2 size={12} className="text-emerald-600" /> Evaluated ({personalCheckedCopy.score || 'Checked'})
                                     </span>
                                   ) : uploadedSheet ? (
-                                    <span className="px-3 py-1 bg-amber-50 text-amber-800 border border-amber-300 font-extrabold text-xs rounded-full uppercase tracking-wider flex items-center gap-1">
-                                      <Clock size={13} className="text-amber-600" /> Under Evaluation
+                                    <span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[11px] rounded-full flex items-center gap-1">
+                                      <Clock size={12} className="text-amber-600" /> Under Evaluation
                                     </span>
                                   ) : (
-                                    <span className="px-3 py-1 bg-slate-100 text-slate-600 border border-slate-200 font-bold text-xs rounded-full uppercase tracking-wider">
-                                      Not Submitted
+                                    <span className="px-2 py-0.5 bg-slate-100 text-slate-500 font-bold text-[10px] rounded-full uppercase">
+                                      Pending
                                     </span>
                                   )}
 
                                   <button
                                     type="button"
-                                    className="p-1.5 bg-slate-100 hover:bg-slate-200 text-[#0a2968] rounded-lg transition-all"
+                                    className="p-1 bg-slate-100 hover:bg-slate-200 text-[#0a2968] rounded-md transition-all"
                                     title={isExpanded ? "Collapse Details" : "Expand Details"}
                                   >
-                                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                    {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
                                   </button>
                                 </div>
                               </div>
 
-                              {/* EXPANDED CONTENT PANEL */}
+                              {/* EXPANDED CONTENT PANEL (UN-BOXED CLEAN LAYOUT) */}
                               {isExpanded && (
-                                <div className="pt-2 border-t border-slate-100 space-y-4 animate-in fade-in duration-200">
+                                <div className="pt-3 border-t border-slate-100 space-y-3.5 animate-in fade-in duration-200">
                                   
-                                  {/* DAY TEXT NOTE / INSTRUCTIONS IF ANY */}
+                                  {/* DAY TEXT NOTE / INSTRUCTIONS */}
                                   {test.textNote && (
-                                    <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-xs font-semibold text-slate-700">
-                                      <span className="font-extrabold text-[#0a2968] block mb-0.5">📌 Day {dayNum} Note & Guidance:</span>
+                                    <div className="pl-3 border-l-2 border-[#0a2968] py-0.5 text-xs text-slate-600">
+                                      <span className="font-bold text-[#0a2968]">Guidance: </span>
                                       {test.textNote}
                                     </div>
                                   )}
 
-                                  {/* ACTION BLOCK 1: QUESTION PAPER PDF */}
-                                  <div className="p-3.5 bg-slate-50/90 rounded-xl border border-slate-200 space-y-3 text-xs font-semibold text-slate-700">
-                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                      <div className="flex items-center gap-2">
-                                        <FileText size={16} className="text-[#0a2968]" />
-                                        <span className="font-extrabold text-slate-800">Question Paper PDF:</span>
-                                      </div>
-
-                                      {questionPdf ? (
-                                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-                                          <button
-                                            type="button"
-                                            disabled={loadingPdfKey === `v_q_${test.id}`}
-                                            onClick={() => handleViewPdf(questionPdf, `v_q_${test.id}`)}
-                                            className="px-3 py-1.5 bg-[#0a2968] hover:bg-[#12387a] text-white disabled:opacity-70 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
-                                          >
-                                            {loadingPdfKey === `v_q_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Opening...
-                                              </>
-                                            ) : (
-                                              <>
-                                                <Eye size={13} className="text-[#EF961D]" /> View PDF
-                                              </>
-                                            )}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            disabled={loadingPdfKey === `p_q_${test.id}`}
-                                            onClick={() => handlePrintPdf(questionPdf, `p_q_${test.id}`)}
-                                            className="px-3 py-1.5 bg-white hover:bg-slate-100 text-[#0a2968] disabled:opacity-70 border border-slate-300 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                                          >
-                                            {loadingPdfKey === `p_q_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={13} className="animate-spin text-[#0a2968]" /> Printing...
-                                              </>
-                                            ) : (
-                                              <>
-                                                <Printer size={13} /> Print
-                                              </>
-                                            )}
-                                          </button>
-                                          <button
-                                            type="button"
-                                            disabled={loadingPdfKey === `d_q_${test.id}`}
-                                            onClick={() => handleDownloadPdf(questionPdf, testTitleStr, `d_q_${test.id}`)}
-                                            className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-800 disabled:opacity-70 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors"
-                                          >
-                                            {loadingPdfKey === `d_q_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={13} className="animate-spin text-slate-700" /> Downloading...
-                                              </>
-                                            ) : (
-                                              <>
-                                                <Download size={13} /> Download
-                                              </>
-                                            )}
-                                          </button>
-                                        </div>
-                                      ) : (
-                                        <span className="text-[11px] font-bold text-slate-400 italic">
-                                          Question Paper PDF will be uploaded soon by faculty
-                                        </span>
-                                      )}
+                                  {/* ROW 1: QUESTION PAPER PDF */}
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 py-1 border-b border-slate-100 text-xs">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <FileText size={15} className="text-[#0a2968] shrink-0" />
+                                      <span className="font-bold text-slate-800">Question Paper PDF:</span>
                                     </div>
 
-                                    {/* INLINE QUESTION PDF VIEWER */}
-                                    {questionPdf && openInlinePdfs[qPdfKey] && (
-                                      <div className="pt-2 animate-in fade-in duration-200">
-                                        <div className="bg-slate-900 rounded-xl p-2 h-[480px]">
-                                          <iframe
-                                            src={questionPdf}
-                                            title="Question Paper PDF Document"
-                                            className="w-full h-full rounded-lg border-0 bg-white"
-                                          />
-                                        </div>
+                                    {questionPdf ? (
+                                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                                        <button
+                                          type="button"
+                                          disabled={loadingPdfKey === `v_q_${test.id}`}
+                                          onClick={() => handleViewPdf(questionPdf, `v_q_${test.id}`)}
+                                          className="px-2.5 py-1 bg-[#0a2968] hover:bg-[#12387a] text-white disabled:opacity-70 rounded-lg font-bold text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-2xs"
+                                        >
+                                          {loadingPdfKey === `v_q_${test.id}` ? (
+                                            <Loader2 size={12} className="animate-spin text-[#EF961D]" />
+                                          ) : (
+                                            <Eye size={12} className="text-[#EF961D]" />
+                                          )}
+                                          <span>View PDF</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={loadingPdfKey === `p_q_${test.id}`}
+                                          onClick={() => handlePrintPdf(questionPdf, `p_q_${test.id}`)}
+                                          className="px-2.5 py-1 bg-white hover:bg-slate-100 text-[#0a2968] disabled:opacity-70 border border-slate-300 rounded-lg font-semibold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                                        >
+                                          {loadingPdfKey === `p_q_${test.id}` ? (
+                                            <Loader2 size={12} className="animate-spin text-[#0a2968]" />
+                                          ) : (
+                                            <Printer size={12} />
+                                          )}
+                                          <span>Print</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={loadingPdfKey === `d_q_${test.id}`}
+                                          onClick={() => handleDownloadPdf(questionPdf, testTitleStr, `d_q_${test.id}`)}
+                                          className="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-800 disabled:opacity-70 rounded-lg font-semibold text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                                        >
+                                          {loadingPdfKey === `d_q_${test.id}` ? (
+                                            <Loader2 size={12} className="animate-spin text-slate-700" />
+                                          ) : (
+                                            <Download size={12} />
+                                          )}
+                                          <span>Download</span>
+                                        </button>
                                       </div>
+                                    ) : (
+                                      <span className="text-[11px] font-medium text-slate-400 italic">
+                                        Paper will be uploaded soon
+                                      </span>
                                     )}
                                   </div>
 
-                                  {/* ACTION BLOCK 2: ANSWER COPY UPLOAD */}
-                                  <div className="p-3.5 bg-blue-50/40 rounded-xl border border-blue-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-semibold">
+                                  {/* INLINE QUESTION PDF VIEWER */}
+                                  {questionPdf && openInlinePdfs[qPdfKey] && (
+                                    <div className="pt-1 animate-in fade-in duration-200">
+                                      <div className="bg-slate-900 rounded-xl p-1.5 h-[360px] sm:h-[460px]">
+                                        <iframe
+                                          src={questionPdf}
+                                          title="Question Paper PDF Document"
+                                          className="w-full h-full rounded-lg border-0 bg-white"
+                                        />
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* ROW 2: ANSWER COPY UPLOAD */}
+                                  <div className="py-1 text-xs">
                                     {(() => {
                                       const isThisUploading = uploadingTestKey === compositeKey;
 
                                       if (uploadedSheet) {
                                         return (
-                                          <div className="flex items-center justify-between w-full">
-                                            <div>
-                                              <span className="text-[#0a2968] font-extrabold block">✅ Your Submitted Answer Sheet:</span>
-                                              <span className="text-slate-600 font-bold">{uploadedSheet.fileName} ({uploadedSheet.fileSize})</span>
-                                              <div className="text-[10px] text-slate-400">Uploaded on {uploadedSheet.uploadedAt}</div>
+                                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
+                                            <div className="min-w-0">
+                                              <span className="text-[#0a2968] font-bold block truncate">✅ Submitted Answer Sheet:</span>
+                                              <span className="text-slate-600 text-[11px] font-medium truncate block">{uploadedSheet.fileName}</span>
                                             </div>
-                                            <label className={`inline-flex items-center gap-1.5 px-3.5 py-2 bg-white hover:bg-slate-100 text-[#0a2968] rounded-xl border border-slate-300 font-bold text-xs cursor-pointer transition-all shadow-2xs ${isThisUploading ? 'opacity-70 pointer-events-none' : ''}`}>
+                                            <label className={`inline-flex items-center gap-1 px-3 py-1 bg-white hover:bg-slate-100 text-[#0a2968] rounded-lg border border-slate-300 font-bold text-xs cursor-pointer transition-all shrink-0 ${isThisUploading ? 'opacity-70 pointer-events-none' : ''}`}>
                                               {isThisUploading ? (
-                                                <>
-                                                  <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Uploading...
-                                                </>
+                                                <Loader2 size={12} className="animate-spin text-[#EF961D]" />
                                               ) : (
-                                                <>
-                                                  <Upload size={13} /> Re-upload
-                                                </>
+                                                <Upload size={12} />
                                               )}
+                                              <span>Re-upload PDF</span>
                                               <input
                                                 type="file"
                                                 accept=".pdf,.jpg,.jpeg,.png"
@@ -1061,23 +1023,21 @@ const StudentDashboard = () => {
                                       }
 
                                       return (
-                                        <div className="flex items-center justify-between w-full">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 py-1">
                                           <div>
-                                            <span className="text-[#0a2968] font-extrabold block">Upload Handwritten Answer Copy:</span>
+                                            <span className="text-slate-800 font-bold block">Upload Answer Copy:</span>
                                             <span className="text-slate-500 text-[11px]">
-                                              {isDayWiseCourse
-                                                ? `Scan Day ${dayNum} written answer sheet to PDF & upload to unlock Day ${dayNum + 1}`
-                                                : "Scan your written answer sheet as PDF and upload here"}
+                                              Scan handwritten sheet to PDF & upload here
                                             </span>
                                           </div>
-                                          <label className={`inline-flex items-center gap-2 px-5 py-2.5 bg-[#0a2968] hover:bg-[#EF961D] text-white rounded-xl text-xs font-extrabold uppercase tracking-wider cursor-pointer transition-all shadow-xs shrink-0 ${isThisUploading ? 'opacity-75 pointer-events-none bg-[#0a2968]/80' : ''}`}>
+                                          <label className={`inline-flex items-center gap-1.5 px-4 py-1.5 bg-[#0a2968] hover:bg-[#12387a] text-white rounded-lg text-xs font-bold cursor-pointer transition-all shadow-2xs shrink-0 ${isThisUploading ? 'opacity-75 pointer-events-none' : ''}`}>
                                             {isThisUploading ? (
                                               <>
-                                                <Loader2 size={15} className="animate-spin text-[#EF961D]" /> Uploading Answer...
+                                                <Loader2 size={13} className="animate-spin text-[#EF961D]" /> Uploading...
                                               </>
                                             ) : (
                                               <>
-                                                <Upload size={14} /> Upload Answer (PDF)
+                                                <Upload size={13} /> Upload Answer (PDF)
                                               </>
                                             )}
                                             <input
@@ -1093,74 +1053,65 @@ const StudentDashboard = () => {
                                     })()}
                                   </div>
 
-                                  {/* ACTION BLOCK 3: PERSONAL CHECKED COPY */}
+                                  {/* ROW 3: PERSONAL CHECKED COPY */}
                                   {personalCheckedCopy && (
-                                    <div className="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl space-y-3">
-                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-200/80 pb-3">
+                                    <div className="p-3 bg-emerald-50/80 border border-emerald-200/80 rounded-xl space-y-2 text-xs">
+                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div>
-                                          <span className="px-2.5 py-0.5 bg-emerald-700 text-white rounded text-[10px] font-black uppercase tracking-wider">
-                                            🔐 Personal Evaluated Copy (Checked For You)
+                                          <span className="font-bold text-emerald-900 block">
+                                            Evaluated Copy — Score: <strong className="text-emerald-950 font-black">{personalCheckedCopy.score}</strong>
                                           </span>
-                                          <div className="text-xs font-bold text-emerald-900 mt-1">
-                                            Score: <strong className="text-emerald-950 font-black">{personalCheckedCopy.score}</strong> | Remarks: "{personalCheckedCopy.remarks}"
-                                          </div>
+                                          <span className="text-[11px] text-emerald-800 italic block">
+                                            "{personalCheckedCopy.remarks}"
+                                          </span>
                                         </div>
 
-                                        <div className="flex items-center gap-2 shrink-0">
+                                        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                                           <button
                                             disabled={loadingPdfKey === `v_chk_${test.id}`}
                                             onClick={() => handleViewPdf(personalCheckedCopy.resultPdf, `v_chk_${test.id}`)}
-                                            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                            className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white disabled:opacity-70 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
                                           >
                                             {loadingPdfKey === `v_chk_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={14} className="animate-spin text-[#EF961D]" /> Opening...
-                                              </>
+                                              <Loader2 size={12} className="animate-spin text-[#EF961D]" />
                                             ) : (
-                                              <>
-                                                <Award size={14} /> View Checked Copy PDF
-                                              </>
+                                              <Award size={12} />
                                             )}
+                                            <span>View Checked PDF</span>
                                           </button>
                                           <button
                                             type="button"
                                             disabled={loadingPdfKey === `p_chk_${test.id}`}
                                             onClick={() => handlePrintPdf(personalCheckedCopy.resultPdf, `p_chk_${test.id}`)}
-                                            className="px-3 py-2 bg-white hover:bg-slate-100 text-emerald-900 disabled:opacity-70 border border-emerald-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            className="px-2 py-1 bg-white hover:bg-slate-100 text-emerald-900 disabled:opacity-70 border border-emerald-300 rounded-lg text-xs font-semibold cursor-pointer"
                                           >
                                             {loadingPdfKey === `p_chk_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={14} className="animate-spin text-emerald-900" /> Printing...
-                                              </>
+                                              <Loader2 size={12} className="animate-spin text-emerald-900" />
                                             ) : (
-                                              <>
-                                                <Printer size={14} /> Print
-                                              </>
+                                              <Printer size={12} />
                                             )}
+                                            <span>Print</span>
                                           </button>
                                           <button
                                             type="button"
                                             disabled={loadingPdfKey === `d_chk_${test.id}`}
                                             onClick={() => handleDownloadPdf(personalCheckedCopy.resultPdf, `${testTitleStr}_Personal_Checked`, `d_chk_${test.id}`)}
-                                            className="px-3 py-2 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 disabled:opacity-70 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            className="px-2 py-1 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 disabled:opacity-70 rounded-lg text-xs font-semibold cursor-pointer"
                                           >
                                             {loadingPdfKey === `d_chk_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={14} className="animate-spin text-emerald-900" /> Downloading...
-                                              </>
+                                              <Loader2 size={12} className="animate-spin text-emerald-900" />
                                             ) : (
-                                              <>
-                                                <Download size={14} /> Download
-                                              </>
+                                              <Download size={12} />
                                             )}
+                                            <span>Download</span>
                                           </button>
                                         </div>
                                       </div>
 
                                       {/* INLINE EVALUATED CHECKED COPY PDF VIEWER */}
                                       {openInlinePdfs[checkedPdfKey] && (
-                                        <div className="pt-2 animate-in fade-in duration-200">
-                                          <div className="bg-slate-900 rounded-xl p-2 h-[500px]">
+                                        <div className="pt-1 animate-in fade-in duration-200">
+                                          <div className="bg-slate-900 rounded-xl p-1.5 h-[360px] sm:h-[460px]">
                                             <iframe
                                               src={personalCheckedCopy.resultPdf}
                                               title="Personal Evaluated Answer Sheet PDF"
@@ -1172,74 +1123,62 @@ const StudentDashboard = () => {
                                     </div>
                                   )}
 
-                                  {/* ACTION BLOCK 4: COURSE-WIDE MODEL ANSWER / RESULT */}
+                                  {/* ROW 4: COURSE MODEL ANSWER / RESULT */}
                                   {courseModelResult && (
-                                    <div className="p-4 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-3">
-                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-200/80 pb-3">
+                                    <div className="p-3 bg-purple-50/80 border border-purple-200/80 rounded-xl space-y-2 text-xs">
+                                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div>
-                                          <span className="px-2.5 py-0.5 bg-purple-700 text-white rounded text-[10px] font-black uppercase tracking-wider">
-                                            🌐 Course Model Solution & Result (All Students)
+                                          <span className="font-bold text-purple-900 block">
+                                            Official Model Solution & Benchmark Score: <strong className="text-purple-950 font-black">{courseModelResult.score}</strong>
                                           </span>
-                                          <div className="text-xs font-bold text-purple-900 mt-1">
-                                            Official Model Answer Framework & Benchmark Score: <strong className="text-purple-950 font-black">{courseModelResult.score}</strong>
-                                          </div>
                                         </div>
 
-                                        <div className="flex items-center gap-2 shrink-0">
+                                        <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
                                           <button
                                             disabled={loadingPdfKey === `v_mdl_${test.id}`}
                                             onClick={() => handleViewPdf(courseModelResult.resultPdf, `v_mdl_${test.id}`)}
-                                            className="px-3.5 py-2 bg-purple-700 hover:bg-purple-800 text-white disabled:opacity-70 rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                                            className="px-2.5 py-1 bg-purple-700 hover:bg-purple-800 text-white disabled:opacity-70 rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs cursor-pointer"
                                           >
                                             {loadingPdfKey === `v_mdl_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={14} className="animate-spin text-[#EF961D]" /> Opening...
-                                              </>
+                                              <Loader2 size={12} className="animate-spin text-[#EF961D]" />
                                             ) : (
-                                              <>
-                                                <Award size={14} /> View Model Answer PDF
-                                              </>
+                                              <Award size={12} />
                                             )}
+                                            <span>View Model PDF</span>
                                           </button>
                                           <button
                                             type="button"
                                             disabled={loadingPdfKey === `p_mdl_${test.id}`}
                                             onClick={() => handlePrintPdf(courseModelResult.resultPdf, `p_mdl_${test.id}`)}
-                                            className="px-3 py-2 bg-white hover:bg-slate-100 text-purple-900 disabled:opacity-70 border border-purple-300 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            className="px-2 py-1 bg-white hover:bg-slate-100 text-purple-900 disabled:opacity-70 border border-purple-300 rounded-lg text-xs font-semibold cursor-pointer"
                                           >
                                             {loadingPdfKey === `p_mdl_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={14} className="animate-spin text-purple-900" /> Printing...
-                                              </>
+                                              <Loader2 size={12} className="animate-spin text-purple-900" />
                                             ) : (
-                                              <>
-                                                <Printer size={14} /> Print
-                                              </>
+                                              <Printer size={12} />
                                             )}
+                                            <span>Print</span>
                                           </button>
                                           <button
                                             type="button"
                                             disabled={loadingPdfKey === `d_mdl_${test.id}`}
                                             onClick={() => handleDownloadPdf(courseModelResult.resultPdf, `${testTitleStr}_Model_Answer`, `d_mdl_${test.id}`)}
-                                            className="px-3 py-2 bg-purple-100 hover:bg-purple-200 text-purple-900 disabled:opacity-70 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                                            className="px-2 py-1 bg-purple-100 hover:bg-purple-200 text-purple-900 disabled:opacity-70 rounded-lg text-xs font-semibold cursor-pointer"
                                           >
                                             {loadingPdfKey === `d_mdl_${test.id}` ? (
-                                              <>
-                                                <Loader2 size={14} className="animate-spin text-purple-900" /> Downloading...
-                                              </>
+                                              <Loader2 size={12} className="animate-spin text-purple-900" />
                                             ) : (
-                                              <>
-                                                <Download size={14} /> Download
-                                              </>
+                                              <Download size={12} />
                                             )}
+                                            <span>Download</span>
                                           </button>
                                         </div>
                                       </div>
 
                                       {/* INLINE MODEL ANSWER PDF VIEWER */}
                                       {openInlinePdfs[modelPdfKey] && (
-                                        <div className="pt-2 animate-in fade-in duration-200">
-                                          <div className="bg-slate-900 rounded-xl p-2 h-[500px]">
+                                        <div className="pt-1 animate-in fade-in duration-200">
+                                          <div className="bg-slate-900 rounded-xl p-1.5 h-[360px] sm:h-[460px]">
                                             <iframe
                                               src={courseModelResult.resultPdf}
                                               title="Course Model Answer PDF"
@@ -1268,6 +1207,33 @@ const StudentDashboard = () => {
           </div>
         )}
       </main>
+
+      {/* LIGHT BRAND THEMED TOAST NOTIFICATION */}
+      {toast && (
+        <div className="fixed bottom-6 right-4 sm:right-6 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className={`bg-white border text-slate-800 shadow-xl rounded-xl px-4 py-3 flex items-center gap-2.5 max-w-xs sm:max-w-sm ${
+            toast.type === 'error' ? 'border-red-200 bg-red-50/95 text-red-900' :
+            toast.type === 'success' ? 'border-emerald-200 bg-emerald-50/95 text-emerald-950' :
+            'border-blue-200 bg-blue-50/95 text-[#0a2968]'
+          }`}>
+            {toast.type === 'error' ? (
+              <AlertCircle size={16} className="text-red-500 shrink-0" />
+            ) : toast.type === 'success' ? (
+              <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
+            ) : (
+              <Sparkles size={16} className="text-[#EF961D] shrink-0" />
+            )}
+            <span className="text-xs font-bold leading-tight">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="p-1 hover:bg-black/5 rounded-md text-slate-400 hover:text-slate-600 ml-auto shrink-0 cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* GLOBAL FOOTER */}
       <Footer />

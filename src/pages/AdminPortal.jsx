@@ -80,6 +80,9 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   // Admin Global PDF Modal State
   const [adminPreviewPdf, setAdminPreviewPdf] = useState(null);
 
+  // All Registered Users State (Registered accounts count whether course purchased or not)
+  const [allRegisteredUsers, setAllRegisteredUsers] = useState([]);
+
   // Blog States
   const [blogs, setBlogs] = useState([]);
   const [blogLoading, setBlogLoading] = useState(false);
@@ -453,6 +456,19 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
 
   const fetchDashboardAnalytics = async () => {
     try {
+      // Fetch all registered users from MongoDB (whether course purchased or not)
+      try {
+        const usersRes = await fetch(getApiUrl('/api/auth/all-users'));
+        if (usersRes.ok) {
+          const usersData = await usersRes.json();
+          if (Array.isArray(usersData)) {
+            setAllRegisteredUsers(usersData);
+          }
+        }
+      } catch (err) {
+        console.warn("Registered users fetch error:", err.message);
+      }
+
       let dbPurchases = [];
       try {
         const resTxns = await fetch(getApiUrl('/api/payment/transactions'));
@@ -602,6 +618,29 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       printFrame.style.width = "1px";
       printFrame.style.height = "1px";
       printFrame.style.border = "0";
+      document.body.appendChild(printFrame);
+
+      let printed = false;
+      const doPrint = () => {
+        if (printed) return;
+        printed = true;
+        try {
+          printFrame.contentWindow.focus();
+          printFrame.contentWindow.print();
+        } catch (err) {
+          console.error("Print iframe trigger error:", err);
+          window.open(pdfUrl, '_blank');
+        }
+        setTimeout(() => {
+          if (document.body.contains(printFrame)) {
+            document.body.removeChild(printFrame);
+          }
+        }, 4000);
+      };
+
+      printFrame.onload = () => {
+        setTimeout(doPrint, 300);
+      };
 
       let frameSrc = pdfUrl;
       try {
@@ -616,33 +655,11 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
 
       printFrame.src = frameSrc;
 
-      let printed = false;
-      printFrame.onload = () => {
-        if (printed) return;
-        printed = true;
-        setTimeout(() => {
-          try {
-            printFrame.contentWindow.focus();
-            printFrame.contentWindow.print();
-          } catch (err) {
-            console.error("Print iframe trigger error:", err);
-          }
-          setTimeout(() => {
-            if (document.body.contains(printFrame)) {
-              document.body.removeChild(printFrame);
-            }
-            if (frameSrc.startsWith("blob:")) {
-              window.URL.revokeObjectURL(frameSrc);
-            }
-          }, 4000);
-        }, 300);
-      };
-
-      document.body.appendChild(printFrame);
     } catch (err) {
       console.error("handlePrintPdf error:", err);
+      window.open(pdfUrl, '_blank');
     } finally {
-      setTimeout(() => setLoadingPdfKey(null), 1200);
+      setTimeout(() => setLoadingPdfKey(null), 1000);
     }
   };
 
@@ -1003,56 +1020,56 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans selection:bg-[#EF961D]/20">
-        <div className="w-full max-w-md bg-white rounded-3xl border border-slate-200 shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300">
-          <div className="text-center mb-8">
-            <div className="w-48 sm:w-56 mx-auto mb-4 flex items-center justify-center">
+        <div className="w-full max-w-sm bg-white rounded-2xl border border-slate-200 shadow-xl p-5 sm:p-6 animate-in fade-in duration-300">
+          <div className="text-center mb-5">
+            <div className="w-32 sm:w-36 mx-auto mb-3 flex items-center justify-center">
               <img
                 src="/images/itopper.png"
                 alt="iTopper Logo"
                 className="w-full object-contain"
               />
             </div>
-            <div className="inline-block px-3 py-1 bg-[#0a2968]/10 text-[#0a2968] text-xs font-black rounded-lg mb-2 uppercase tracking-wider">
+            <span className="inline-block px-2.5 py-0.5 bg-[#0a2968]/10 text-[#0a2968] text-[10px] font-bold rounded-md uppercase tracking-wider mb-1">
               Sub-Admin Control Panel
-            </div>
-            <h2 className="text-2xl font-black text-[#0a2968] tracking-tight">Admin Portal Login</h2>
-            <p className="text-xs text-slate-500 mt-1 font-semibold">Sign in to manage Blogs & Evaluation Plans</p>
+            </span>
+            <h2 className="text-lg font-bold text-[#0a2968] tracking-tight">Admin Portal Login</h2>
+            <p className="text-[11px] text-slate-400 font-medium">Sign in to manage Blogs & Evaluation Plans</p>
           </div>
 
           {authError && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-xs font-bold text-red-600 flex items-center gap-2">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl text-xs font-semibold text-red-600 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-red-500 shrink-0"></span>
               {authError}
             </div>
           )}
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleLogin} className="space-y-3.5">
             <div>
-              <label className="block text-xs font-bold text-[#0a2968] mb-2 uppercase tracking-wider">Admin Email</label>
+              <label className="block text-[11px] font-bold text-[#0a2968] mb-1 uppercase tracking-wider">Admin Email</label>
               <div className="relative">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                 <input
                   type="email"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="itopper@gmail.com"
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl pl-12 pr-4 py-3.5 text-slate-800 outline-none transition-all font-semibold text-sm"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-lg pl-10 pr-3 py-2.5 text-slate-800 outline-none transition-all font-medium text-xs"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-[#0a2968] mb-2 uppercase tracking-wider">Admin Password</label>
+              <label className="block text-[11px] font-bold text-[#0a2968] mb-1 uppercase tracking-wider">Admin Password</label>
               <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
                 <input
                   type="password"
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-xl pl-12 pr-4 py-3.5 text-slate-800 outline-none transition-all font-semibold text-sm"
+                  className="w-full bg-slate-50 border border-slate-200 focus:border-[#0a2968] focus:bg-white rounded-lg pl-10 pr-3 py-2.5 text-slate-800 outline-none transition-all font-medium text-xs"
                 />
               </div>
             </div>
@@ -1060,20 +1077,20 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
             <button
               type="submit"
               disabled={authLoading}
-              className="w-full py-4 bg-[#0a2968] text-white hover:bg-[#EF961D] rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 uppercase tracking-wider"
+              className="w-full py-2.5 bg-[#0a2968] text-white hover:bg-[#12387a] rounded-lg font-bold text-xs shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 uppercase tracking-wider mt-1"
             >
               {authLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <Loader2 className="w-4 h-4 animate-spin text-[#EF961D]" />
               ) : (
                 "Sign In to Admin Portal"
               )}
             </button>
           </form>
 
-          <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+          <div className="mt-5 pt-4 border-t border-slate-100 text-center">
             <Link
               to="/"
-              className="text-xs font-bold text-slate-400 hover:text-[#0a2968] inline-flex items-center gap-1 transition-colors"
+              className="text-[11px] font-semibold text-slate-400 hover:text-[#0a2968] inline-flex items-center gap-1 transition-colors"
             >
               ← Back to Main Website
             </Link>
@@ -1421,7 +1438,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
               <div>
                 <h2 className="text-3xl font-black text-[#0a2968]">Admin Analytics Dashboard</h2>
                 <p className="text-sm text-slate-500 font-semibold mt-1">
-                  Real-time overview of enrolled students, purchased plans, revenue, and evaluation stats
+                  Real-time overview of registered students, course purchasers, plans sold, and total revenue
                 </p>
               </div>
               <button
@@ -1432,34 +1449,53 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
               </button>
             </div>
 
-            {/* SUMMARY STATS GRID (INTERACTIVE CLICKABLE CARDS) */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* Card 1: Total Registered / Enrolled Students */}
+            {/* SUMMARY STATS GRID (4 CLEAN & UNCLUTTERED CARDS) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Card 1: Total Registered Students (Accounts created on platform, whether bought course or not) */}
               <div
                 onClick={() => {
                   setStudentModalSearch("");
                   setActiveStatModal("students");
                 }}
-                className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex items-center justify-between hover:border-[#0a2968] hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer group relative overflow-hidden"
-                title="Click to view full Enrolled Students Directory"
+                className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-2xs flex items-center justify-between hover:border-[#0a2968] hover:shadow-md transition-all cursor-pointer group"
+                title="Click to view full Registered & Enrolled Students Directory"
               >
                 <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Enrolled Students
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">
+                    Registered Students
                   </span>
-                  <div className="text-3xl font-black text-[#0a2968] group-hover:scale-105 transition-transform origin-left">
-                    {new Set(purchasesList.map(p => (p.studentEmail || p.email || 'student@itopper.com').toLowerCase())).size}
+                  <div className="text-2xl sm:text-3xl font-black text-[#0a2968] group-hover:scale-105 transition-transform origin-left">
+                    {Math.max(allRegisteredUsers.length, new Set([...allRegisteredUsers.map(u => u.email.toLowerCase()), ...purchasesList.map(p => (p.studentEmail || p.email || '').toLowerCase())].filter(Boolean)).size)}
                   </div>
-                  <span className="text-[11px] font-bold text-emerald-600 mt-1 inline-flex items-center gap-1">
-                    Active Aspirants <span className="text-[10px] text-slate-400 group-hover:text-[#0a2968] font-semibold">(Click to view ↗)</span>
-                  </span>
                 </div>
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 text-[#0a2968] group-hover:bg-[#0a2968] group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
-                  <Users size={28} />
+                <div className="w-11 h-11 rounded-xl bg-blue-50 text-[#0a2968] group-hover:bg-[#0a2968] group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
+                  <Users size={22} />
                 </div>
               </div>
 
-              {/* Card 2: Total Plan Purchases */}
+              {/* Card 2: Unique Course Purchasers (1 student with 2-3 courses = 1 count) */}
+              <div
+                onClick={() => {
+                  setStudentModalSearch("");
+                  setActiveStatModal("students");
+                }}
+                className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-2xs flex items-center justify-between hover:border-emerald-600 hover:shadow-md transition-all cursor-pointer group"
+                title="Click to view Unique Course Buyers"
+              >
+                <div>
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">
+                    Course Purchasers
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-emerald-600 group-hover:scale-105 transition-transform origin-left">
+                    {new Set(purchasesList.map(p => (p.studentEmail || p.email || 'student@itopper.com').toLowerCase())).size}
+                  </div>
+                </div>
+                <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
+                  <UserCheck size={22} />
+                </div>
+              </div>
+
+              {/* Card 3: Total Plans / Courses Sold (e.g. 4 students bought 10 plans = 10 count) */}
               <div
                 onClick={() => {
                   setAdminSearchTerm("");
@@ -1467,70 +1503,38 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   const el = document.getElementById("purchased-plans-table-section");
                   if (el) el.scrollIntoView({ behavior: "smooth" });
                 }}
-                className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex items-center justify-between hover:border-emerald-600 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+                className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-2xs flex items-center justify-between hover:border-indigo-600 hover:shadow-md transition-all cursor-pointer group"
                 title="Click to view all purchased plans table"
               >
                 <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Plans Purchased
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">
+                    Total Plans Sold
                   </span>
-                  <div className="text-3xl font-black text-[#0a2968] group-hover:scale-105 transition-transform origin-left">
+                  <div className="text-2xl sm:text-3xl font-black text-[#0a2968] group-hover:scale-105 transition-transform origin-left">
                     {purchasesList.length}
                   </div>
-                  <span className="text-[11px] font-bold text-blue-600 mt-1 inline-flex items-center gap-1">
-                    Total Enrollments <span className="text-[10px] text-slate-400 group-hover:text-blue-600 font-semibold">(View table ↗)</span>
-                  </span>
                 </div>
-                <div className="w-14 h-14 rounded-2xl bg-emerald-50 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
-                  <CreditCard size={28} />
+                <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 group-hover:bg-indigo-600 group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
+                  <CreditCard size={22} />
                 </div>
               </div>
 
-              {/* Card 3: Total Revenue */}
+              {/* Card 4: Total Revenue */}
               <div
                 onClick={() => setActiveStatModal("revenue")}
-                className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex items-center justify-between hover:border-[#EF961D] hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer group relative overflow-hidden"
+                className="bg-white rounded-2xl border border-slate-200 p-4.5 shadow-2xs flex items-center justify-between hover:border-[#EF961D] hover:shadow-md transition-all cursor-pointer group"
                 title="Click to view Revenue Collections Breakdown"
               >
                 <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
+                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider block mb-0.5">
                     Total Revenue
                   </span>
-                  <div className="text-3xl font-black text-[#0a2968] group-hover:scale-105 transition-transform origin-left">
+                  <div className="text-2xl sm:text-3xl font-black text-[#0a2968] group-hover:scale-105 transition-transform origin-left">
                     ₹{purchasesList.reduce((sum, p) => sum + (Number(p.finalPrice || p.finalPaid || 4999)), 0).toLocaleString("en-IN")}
                   </div>
-                  <span className="text-[11px] font-bold text-emerald-600 mt-1 inline-flex items-center gap-1">
-                    Total Collections <span className="text-[10px] text-slate-400 group-hover:text-[#EF961D] font-semibold">(Breakdown ↗)</span>
-                  </span>
                 </div>
-                <div className="w-14 h-14 rounded-2xl bg-orange-50 text-[#EF961D] group-hover:bg-[#EF961D] group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
-                  <DollarSign size={28} />
-                </div>
-              </div>
-
-              {/* Card 4: Active Evaluation Plans */}
-              <div
-                onClick={() => {
-                  setActiveAdminTab("evaluations");
-                  setSearchParams({ tab: "evaluations" });
-                  window.scrollTo({ top: 0, behavior: "smooth" });
-                }}
-                className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm flex items-center justify-between hover:border-purple-600 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer group relative overflow-hidden"
-                title="Click to manage Evaluation Cards"
-              >
-                <div>
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-1">
-                    Evaluation Cards
-                  </span>
-                  <div className="text-3xl font-black text-[#0a2968] group-hover:scale-105 transition-transform origin-left">
-                    {evaluations.length}
-                  </div>
-                  <span className="text-[11px] font-bold text-purple-600 mt-1 inline-flex items-center gap-1">
-                    Live Plans Active <span className="text-[10px] text-slate-400 group-hover:text-purple-600 font-semibold">(Manage cards ↗)</span>
-                  </span>
-                </div>
-                <div className="w-14 h-14 rounded-2xl bg-purple-50 text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
-                  <Layers size={28} />
+                <div className="w-11 h-11 rounded-xl bg-orange-50 text-[#EF961D] group-hover:bg-[#EF961D] group-hover:text-white transition-all flex items-center justify-center shrink-0 shadow-2xs">
+                  <DollarSign size={22} />
                 </div>
               </div>
             </div>
@@ -1539,9 +1543,6 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden p-6 sm:p-8 space-y-6">
               <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 pb-6 border-b border-slate-100">
                 <div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-[#0a2968] font-black text-xs rounded-lg uppercase tracking-wider mb-1 border border-amber-200">
-                    <Sparkles size={13} className="text-[#EF961D]" /> Evaluation Plan Management
-                  </div>
                   <h3 className="text-xl font-black text-[#0a2968]">
                     Student Answer Sheet Submissions ({studentSubmissions.length})
                   </h3>
