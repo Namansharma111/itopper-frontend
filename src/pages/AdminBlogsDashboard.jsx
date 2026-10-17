@@ -213,6 +213,15 @@ const AdminBlogsDashboard = () => {
       fetchBlogs();
     } catch (err) {
       console.error("Save article error:", err);
+      const status = err?.response?.status;
+      const msg = err?.response?.data?.message || err?.message || "Unknown error";
+      if (status === 401 || status === 403) {
+        alert(`❌ Auth Error (${status}): ${msg}\n\nAdmin token expired ya invalid hai. Logout karke dobara login karein.`);
+      } else if (status === 500) {
+        alert(`❌ Server Error: ${msg}\n\nBackend mein kuch gadbad hai. Backend logs check karein.`);
+      } else {
+        alert(`❌ Blog save nahi hua!\n\nError: ${msg}\n\nStatus: ${status || "Network Error"}`);
+      }
     } finally {
       setIsSaving(false);
     }
