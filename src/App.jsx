@@ -1,4 +1,5 @@
 import React from "react";
+import WhatsAppButton from "./components/WhatsAppButton";
 import { Routes, Route, useLocation } from "react-router-dom"; // 👈 useLocation add kiya
 
 // Toastify
@@ -238,6 +239,7 @@ function App() {
         </div>
 
         {/* 👇 GLOBAL FOOTER: Ye bhi tabhi dikhega jab hum Landing Page par NAHI hain */}
+      <WhatsAppButton />
         {/* Note: Landing Page ka footer upar <Route path="/"> ke andar already included hai */}
         {!isLightModePage && <Footer />}
       </div>
