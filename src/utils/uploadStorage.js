@@ -29,9 +29,7 @@ export const uploadFileToCloudinary = async (file, folder = 'itopper_docs') => {
       }
     }
   } catch (err) {
-    console.warn('Backend Cloudinary upload endpoint unreachable, using local object URL fallback:', err.message);
+    console.error('❌ Cloudinary upload failed:', err.message);
+    throw new Error(`Image upload failed: ${err.message}`);
   }
-
-  // Fallback if backend API is not running locally
-  return URL.createObjectURL(file);
 };

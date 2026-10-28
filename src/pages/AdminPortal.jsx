@@ -3092,32 +3092,97 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-extrabold text-slate-600 uppercase mb-2">Cover Image URL / Upload</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={blogImage}
-                        onChange={(e) => setBlogImage(e.target.value)}
-                        placeholder="https://..."
-                        className="flex-grow bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold outline-none"
-                      />
-                      <label className="px-3 py-3 bg-[#0a2968] text-white hover:bg-[#EF961D] rounded-xl font-extrabold text-xs flex items-center gap-1 cursor-pointer shrink-0 transition-colors">
-                        <Upload size={14} />
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={async (e) => {
-                            const file = e.target.files[0];
-                            if (file) {
-                              const cloudinaryUrl = await uploadFileToCloudinary(file, 'blog_cover_images');
-                              setBlogImage(cloudinaryUrl);
-                              alert(`✅ Blog cover image uploaded to Cloudinary!\n${cloudinaryUrl}`);
-                            }
-                          }}
-                        />
-                      </label>
-                    </div>
+                    <label className="block text-xs font-extrabold text-slate-600 uppercase mb-2">Cover Image</label>
+
+                    {isUploadingCoverImg ? (
+                      <div className="border-2 border-dashed border-[#0a2968]/40 rounded-2xl bg-blue-50 flex flex-col items-center justify-center gap-2" style={{ minHeight: '140px' }}>
+                        <Loader2 className="w-9 h-9 text-[#0a2968] animate-spin" />
+                        <span className="text-sm font-bold text-[#0a2968]">Image upload ho rahi hai...</span>
+                        <span className="text-[10px] text-slate-500 font-medium">Cloudinary pe save ho rahi hai ✨</span>
+                      </div>
+                    ) : blogImage ? (
+                      <div className="rounded-2xl overflow-hidden border-2 border-green-400 shadow-sm" style={{ background: '#f0fdf4' }}>
+                        <div className="relative" style={{ height: '150px' }}>
+                          <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-green-500 text-white text-[9px] font-black px-2 py-1 rounded-full shadow">
+                            <Check size={10} /> Uploaded!
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setBlogImage("")}
+                            className="absolute top-2 right-2 z-10 p-1 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors cursor-pointer"
+                            title="Image hatao"
+                          >
+                            <X size={12} />
+                          </button>
+                          <img
+                            src={blogImage}
+                            alt="Cover"
+                            style={{ width: '100%', height: '150px', objectFit: 'cover', display: 'block' }}
+                          />
+                        </div>
+                        <label className="flex items-center justify-center gap-1.5 py-2 bg-white border-t-2 border-green-200 text-[11px] font-bold text-slate-500 hover:text-[#0a2968] hover:bg-slate-50 cursor-pointer transition-colors">
+                          <Upload size={11} /> Change Image
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              setIsUploadingCoverImg(true);
+                              try {
+                                const url = await uploadFileToCloudinary(file, 'blog_cover_images');
+                                setBlogImage(url);
+                              } catch (err) {
+                                alert(`❌ Upload failed: ${err.message}`);
+                              } finally {
+                                setIsUploadingCoverImg(false);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={blogImage}
+                            onChange={(e) => setBlogImage(e.target.value)}
+                            placeholder="https://... ya neeche se upload karo"
+                            className="flex-grow bg-white border border-slate-200 rounded-xl px-4 py-3 text-xs font-semibold outline-none"
+                          />
+                        </div>
+                        <label
+                          className="border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center gap-1.5 hover:bg-slate-50 hover:border-[#0a2968]/40 cursor-pointer transition-all"
+                          style={{ minHeight: '100px' }}
+                        >
+                          <Upload className="w-7 h-7 text-slate-400" />
+                          <span className="text-xs font-bold text-[#0a2968]">Click to upload image</span>
+                          <span className="text-[9px] text-slate-400">PNG, JPG, WEBP</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              setIsUploadingCoverImg(true);
+                              try {
+                                const url = await uploadFileToCloudinary(file, 'blog_cover_images');
+                                setBlogImage(url);
+                              } catch (err) {
+                                alert(`❌ Upload failed: ${err.message}`);
+                              } finally {
+                                setIsUploadingCoverImg(false);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2 pt-2">
