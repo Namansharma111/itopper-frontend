@@ -70,6 +70,7 @@ const AdminBlogsDashboard = () => {
   // Upload state
   const [imageInputMethod, setImageInputMethod] = useState("upload"); // 'upload' or 'url'
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // SEO fields
   const [seoTitle, setSeoTitle] = useState("");
@@ -155,14 +156,42 @@ const AdminBlogsDashboard = () => {
     }
   };
 
-  const handleImageUpload = (e) => {
+  const handleImageUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setBlogImage(reader.result); // Base64 data URL
-      };
-      reader.readAsDataURL(file);
+    if (!file) return;
+
+    setIsUploadingImage(true);
+    try {
+      // Upload directly to Cloudinary via backend /api/upload
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('folder', 'itopper_blogs');
+
+      const token = localStorage.getItem('token');
+      const res = await fetch(getApiUrl('/api/upload'), {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || `Upload failed (${res.status})`);
+      }
+
+      const data = await res.json();
+      if (data.url) {
+        setBlogImage(data.url); // Permanent Cloudinary HTTPS URL
+      } else {
+        throw new Error('No URL returned from upload');
+      }
+    } catch (err) {
+      console.error('Image upload error:', err);
+      alert(`❌ Image upload failed: ${err.message}\n\nInternet connection ya backend check karein.`);
+    } finally {
+      setIsUploadingImage(false);
+      // Reset file input so same file can be re-selected if needed
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -864,22 +893,80 @@ const AdminBlogsDashboard = () => {
                       </button>
                     </div>
 
+                    {/* Upload box — sirf tab dikhao jab image nahi hai ya upload ho rahi hai */}
                     {imageInputMethod === "upload" ? (
-                      <div
-                        onClick={() => fileInputRef.current?.click()}
-                        className="border-2 border-dashed border-slate-250 rounded-2xl p-6 text-center cursor-pointer hover:bg-slate-50 transition-colors flex flex-col items-center justify-center gap-2 group min-h-[140px]"
-                      >
-                        <input
-                          type="file"
-                          ref={fileInputRef}
-                          onChange={handleImageUpload}
-                          accept="image/*"
-                          className="hidden"
-                        />
-                        <Upload className="w-8 h-8 text-slate-400 group-hover:text-[#163F66] transition-colors" />
-                        <span className="text-xs font-bold text-[#163F66]">Click to upload image file</span>
-                        <span className="text-[10px] text-slate-450 leading-tight">PNG, JPG, or WEBP. Local browser storage.</span>
-                      </div>
+                      !blogImage || isUploadingImage ? (
+                        <div
+                          onClick={() => !isUploadingImage && fileInputRef.current?.click()}
+                          className={`border-2 border-dashed rounded-2xl p-6 text-center flex flex-col items-center justify-center gap-2 group min-h-[140px] transition-all ${
+                            isUploadingImage
+                              ? 'border-[#163F66]/50 bg-blue-50 cursor-wait'
+                              : 'border-slate-250 hover:bg-slate-50 hover:border-[#163F66]/40 cursor-pointer'
+                          }`}
+                        >
+                          <input
+                            type="file"
+                            ref={fileInputRef}
+                            onChange={handleImageUpload}
+                            accept="image/*"
+                            className="hidden"
+                            disabled={isUploadingImage}
+                          />
+                          {isUploadingImage ? (
+                            <>
+                              <div className="relative">
+                                <Loader2 className="w-10 h-10 text-[#163F66] animate-spin" />
+                              </div>
+                              <span className="text-sm font-bold text-[#163F66]">Image upload ho rahi hai...</span>
+                              <span className="text-[11px] text-slate-500 font-medium">Cloudinary pe save ho rahi hai, please wait ✨</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-8 h-8 text-slate-400 group-hover:text-[#163F66] transition-colors" />
+                              <span className="text-xs font-bold text-[#163F66]">Click to upload image file</span>
+                              <span className="text-[10px] text-slate-450 leading-tight">PNG, JPG, or WEBP — Cloudinary pe permanently save hogi</span>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        /* Image upload ho gayi — preview dikhao with cross + change option */
+                        <div className="rounded-2xl overflow-hidden border-2 border-green-300 bg-green-50 relative">
+                          {/* Success badge */}
+                          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-green-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-md">
+                            <Check size={11} /> Uploaded!
+                          </div>
+                          {/* Cross button — always visible */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setBlogImage("");
+                              if (fileInputRef.current) fileInputRef.current.value = '';
+                            }}
+                            className="absolute top-3 right-3 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                            title="Remove image"
+                          >
+                            <X size={14} />
+                          </button>
+                          {/* Image preview */}
+                          <div className="aspect-video w-full bg-slate-100">
+                            <img src={blogImage} alt="Uploaded Preview" className="w-full h-full object-cover" />
+                          </div>
+                          {/* Change image button */}
+                          <div
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex items-center justify-center gap-2 py-2.5 bg-white border-t-2 border-green-200 text-xs font-bold text-slate-500 hover:text-[#163F66] hover:bg-slate-50 cursor-pointer transition-colors"
+                          >
+                            <input
+                              type="file"
+                              ref={fileInputRef}
+                              onChange={handleImageUpload}
+                              accept="image/*"
+                              className="hidden"
+                            />
+                            <Upload size={12} /> Alag image upload karo
+                          </div>
+                        </div>
+                      )
                     ) : (
                       <input
                         type="text"
@@ -890,13 +977,17 @@ const AdminBlogsDashboard = () => {
                       />
                     )}
 
-                    {blogImage && (
-                      <div className="mt-4 rounded-xl overflow-hidden border border-slate-200 aspect-video shadow-inner bg-slate-100 relative group">
-                        <img src={blogImage} alt="Preview" className="w-full h-full object-cover" />
+                    {/* URL mode mein bhi preview dikhao */}
+                    {imageInputMethod === "url" && blogImage && (
+                      <div className="mt-3 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-50 relative">
+                        <div className="aspect-video w-full bg-slate-100">
+                          <img src={blogImage} alt="URL Preview" className="w-full h-full object-cover" onError={(e) => { e.target.style.display='none'; }} />
+                        </div>
                         <button
                           type="button"
                           onClick={() => setBlogImage("")}
-                          className="absolute top-2 right-2 p-1.5 bg-black/70 hover:bg-black text-white rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                          className="absolute top-3 right-3 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                          title="Remove image"
                         >
                           <X size={14} />
                         </button>
@@ -936,7 +1027,7 @@ const AdminBlogsDashboard = () => {
               <button
                 type="button"
                 onClick={handleSaveBlog}
-                disabled={isSaving}
+                disabled={isSaving || isUploadingImage}
                 className="px-8 py-3 bg-[#163F66] text-white hover:bg-[#EF961D] font-bold rounded-xl transition-all shadow-md hover:shadow-lg flex items-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                 id="save-blog-btn"
               >
