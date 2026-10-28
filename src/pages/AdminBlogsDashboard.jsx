@@ -893,105 +893,99 @@ const AdminBlogsDashboard = () => {
                       </button>
                     </div>
 
-                    {/* Upload box — sirf tab dikhao jab image nahi hai ya upload ho rahi hai */}
+                    {/* ── Single hidden file input for ALL upload triggers ── */}
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      onChange={handleImageUpload}
+                      accept="image/*"
+                      className="hidden"
+                      disabled={isUploadingImage}
+                    />
+
                     {imageInputMethod === "upload" ? (
-                      !blogImage || isUploadingImage ? (
-                        <div
-                          onClick={() => !isUploadingImage && fileInputRef.current?.click()}
-                          className={`border-2 border-dashed rounded-2xl p-6 text-center flex flex-col items-center justify-center gap-2 group min-h-[140px] transition-all ${
-                            isUploadingImage
-                              ? 'border-[#163F66]/50 bg-blue-50 cursor-wait'
-                              : 'border-slate-250 hover:bg-slate-50 hover:border-[#163F66]/40 cursor-pointer'
-                          }`}
-                        >
-                          <input
-                            type="file"
-                            ref={fileInputRef}
-                            onChange={handleImageUpload}
-                            accept="image/*"
-                            className="hidden"
-                            disabled={isUploadingImage}
-                          />
-                          {isUploadingImage ? (
-                            <>
-                              <div className="relative">
-                                <Loader2 className="w-10 h-10 text-[#163F66] animate-spin" />
-                              </div>
-                              <span className="text-sm font-bold text-[#163F66]">Image upload ho rahi hai...</span>
-                              <span className="text-[11px] text-slate-500 font-medium">Cloudinary pe save ho rahi hai, please wait ✨</span>
-                            </>
-                          ) : (
-                            <>
-                              <Upload className="w-8 h-8 text-slate-400 group-hover:text-[#163F66] transition-colors" />
-                              <span className="text-xs font-bold text-[#163F66]">Click to upload image file</span>
-                              <span className="text-[10px] text-slate-450 leading-tight">PNG, JPG, or WEBP — Cloudinary pe permanently save hogi</span>
-                            </>
-                          )}
+                      isUploadingImage ? (
+                        /* ── LOADER: upload chal rahi hai ── */
+                        <div className="border-2 border-dashed border-[#163F66]/40 rounded-2xl bg-blue-50 flex flex-col items-center justify-center gap-3" style={{ minHeight: '160px' }}>
+                          <Loader2 className="w-10 h-10 text-[#163F66] animate-spin" />
+                          <span className="text-sm font-bold text-[#163F66]">Image upload ho rahi hai...</span>
+                          <span className="text-[11px] text-slate-500 font-medium">Cloudinary pe save ho rahi hai, please wait ✨</span>
                         </div>
-                      ) : (
-                        /* Image upload ho gayi — preview dikhao with cross + change option */
-                        <div className="rounded-2xl overflow-hidden border-2 border-green-300 bg-green-50 relative">
-                          {/* Success badge */}
-                          <div className="absolute top-3 left-3 z-10 flex items-center gap-1.5 bg-green-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow-md">
-                            <Check size={11} /> Uploaded!
+                      ) : blogImage ? (
+                        /* ── PREVIEW: image upload ho gayi ── */
+                        <div className="rounded-2xl overflow-hidden border-2 border-green-400 shadow-sm" style={{ background: '#f0fdf4' }}>
+                          <div className="relative" style={{ height: '180px' }}>
+                            {/* Success badge */}
+                            <div className="absolute top-2 left-2 z-10 flex items-center gap-1 bg-green-500 text-white text-[10px] font-black px-2.5 py-1 rounded-full shadow">
+                              <Check size={10} /> Uploaded!
+                            </div>
+                            {/* Cross button — always visible top-right */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setBlogImage("");
+                                if (fileInputRef.current) fileInputRef.current.value = "";
+                              }}
+                              className="absolute top-2 right-2 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                              title="Image hatao"
+                            >
+                              <X size={14} />
+                            </button>
+                            <img
+                              src={blogImage}
+                              alt="Uploaded"
+                              style={{ width: '100%', height: '180px', objectFit: 'cover', display: 'block' }}
+                            />
                           </div>
-                          {/* Cross button — always visible */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setBlogImage("");
-                              if (fileInputRef.current) fileInputRef.current.value = '';
-                            }}
-                            className="absolute top-3 right-3 z-10 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
-                            title="Remove image"
-                          >
-                            <X size={14} />
-                          </button>
-                          {/* Image preview */}
-                          <div className="aspect-video w-full bg-slate-100">
-                            <img src={blogImage} alt="Uploaded Preview" className="w-full h-full object-cover" />
-                          </div>
-                          {/* Change image button */}
+                          {/* Change image strip */}
                           <div
                             onClick={() => fileInputRef.current?.click()}
-                            className="flex items-center justify-center gap-2 py-2.5 bg-white border-t-2 border-green-200 text-xs font-bold text-slate-500 hover:text-[#163F66] hover:bg-slate-50 cursor-pointer transition-colors"
+                            className="flex items-center justify-center gap-1.5 py-2.5 bg-white border-t-2 border-green-200 text-xs font-bold text-slate-500 hover:text-[#163F66] hover:bg-slate-50 cursor-pointer transition-colors"
                           >
-                            <input
-                              type="file"
-                              ref={fileInputRef}
-                              onChange={handleImageUpload}
-                              accept="image/*"
-                              className="hidden"
-                            />
-                            <Upload size={12} /> Alag image upload karo
+                            <Upload size={12} /> Koi aur image upload karo
                           </div>
+                        </div>
+                      ) : (
+                        /* ── EMPTY: click to pick file ── */
+                        <div
+                          onClick={() => fileInputRef.current?.click()}
+                          className="border-2 border-dashed border-slate-300 rounded-2xl text-center flex flex-col items-center justify-center gap-2 group hover:bg-slate-50 hover:border-[#163F66]/40 cursor-pointer transition-all"
+                          style={{ minHeight: '160px' }}
+                        >
+                          <Upload className="w-9 h-9 text-slate-400 group-hover:text-[#163F66] transition-colors" />
+                          <span className="text-sm font-bold text-[#163F66]">Click to upload image</span>
+                          <span className="text-[10px] text-slate-400 leading-tight">PNG, JPG, or WEBP — Cloudinary pe permanently save hogi</span>
                         </div>
                       )
                     ) : (
-                      <input
-                        type="text"
-                        value={blogImage}
-                        onChange={(e) => setBlogImage(e.target.value)}
-                        placeholder="https://images.unsplash.com/..."
-                        className="w-full bg-slate-50 border border-slate-250 focus:border-[#163F66] rounded-xl px-4 py-3 text-slate-800 text-sm outline-none font-semibold"
-                      />
-                    )}
-
-                    {/* URL mode mein bhi preview dikhao */}
-                    {imageInputMethod === "url" && blogImage && (
-                      <div className="mt-3 rounded-2xl overflow-hidden border-2 border-slate-200 bg-slate-50 relative">
-                        <div className="aspect-video w-full bg-slate-100">
-                          <img src={blogImage} alt="URL Preview" className="w-full h-full object-cover" onError={(e) => { e.target.style.display='none'; }} />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setBlogImage("")}
-                          className="absolute top-3 right-3 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
-                          title="Remove image"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
+                      /* ── URL MODE ── */
+                      <>
+                        <input
+                          type="text"
+                          value={blogImage}
+                          onChange={(e) => setBlogImage(e.target.value)}
+                          placeholder="https://images.unsplash.com/..."
+                          className="w-full bg-slate-50 border border-slate-250 focus:border-[#163F66] rounded-xl px-4 py-3 text-slate-800 text-sm outline-none font-semibold"
+                        />
+                        {blogImage && (
+                          <div className="mt-3 rounded-2xl overflow-hidden border-2 border-slate-200 shadow-sm relative" style={{ background: '#f8fafc' }}>
+                            <img
+                              src={blogImage}
+                              alt="URL Preview"
+                              style={{ width: '100%', height: '180px', objectFit: 'cover', display: 'block' }}
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setBlogImage("")}
+                              className="absolute top-2 right-2 p-1.5 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-md transition-colors"
+                              title="Image hatao"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
 
