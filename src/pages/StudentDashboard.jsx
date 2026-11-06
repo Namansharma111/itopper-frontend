@@ -12,6 +12,7 @@ import Navigation from '../components/Navigation';
 import Footer from '../components/Footer';
 import { getEvaluations, DEFAULT_EVALUATIONS, getEvaluationResultsApi, submitAnswerSheetApi, getUserPurchasesApi } from '../utils/evaluationStorage';
 import { getDailyMains } from '../utils/dailyMainsStorage';
+import { loadPrelimsPurchases, safeProgramLink } from '../utils/prelimsProgram';
 import { uploadFileToCloudinary } from '../utils/uploadStorage';
 
 const StudentDashboard = () => {
@@ -85,7 +86,13 @@ const StudentDashboard = () => {
       const dbEnrollments = dbPurchases.enrollments || [];
       const dbTransactions = dbPurchases.transactions || [];
 
-      let userEvals = JSON.parse(localStorage.getItem(userKey) || "[]");
+      // Prelims access is restored from active server enrollments, including on a new device.
+      let prelimsPurchases = [];
+      try { prelimsPurchases = await loadPrelimsPurchases(); }
+      catch { showToast('Unable to refresh Prelims purchases. Please reload to try again.', 'error'); }
+      masterCatalog.push(...prelimsPurchases);
+      let userEvals = JSON.parse(localStorage.getItem(userKey) || "[]").filter(p => p.category !== 'Prelims');
+      userEvals.push(...prelimsPurchases);
 
       // Merge MongoDB enrollment records into userEvals
       dbEnrollments.forEach(enr => {
@@ -103,6 +110,7 @@ const StudentDashboard = () => {
 
       // Merge MongoDB transaction records into userEvals
       dbTransactions.forEach(txn => {
+        if (txn.itemType === 'Prelims') return;
         const masterMatch = masterCatalog.find(
           m => String(m._id || m.id) === String(txn.courseId) || m.title === txn.itemName
         );
@@ -419,6 +427,7 @@ const StudentDashboard = () => {
   // Get tests list for a course (or default tests if none explicitly defined)
   const getCourseTests = (course) => {
     if (!course) return [];
+    if (course.category === 'Prelims') return course.sessions || [];
     let testsArr = [];
     if (course.tests && Array.isArray(course.tests) && course.tests.length > 0) {
       testsArr = course.tests;
@@ -461,7 +470,7 @@ const StudentDashboard = () => {
               Welcome, <span className="text-[#EF961D]">{user?.name ? user.name.split(' ')[0] : 'Aspirant'}</span> 👋🏻
             </h1>
             <p className="text-slate-500 text-xs font-semibold mt-1">
-              Select your enrolled course to access syllabus PDFs, submit handwritten answer copies test-by-test, and view evaluated results.
+              Select your enrolled course to access classes, syllabus PDFs, answer submissions and evaluated results.
             </p>
           </div>
 
@@ -544,9 +553,9 @@ const StudentDashboard = () => {
                           {course.title}
                         </h3>
                         <div className="text-[11px] font-bold text-slate-400 mt-1 flex items-center justify-between">
-                          <span>{testsCount} Tests available</span>
+                          <span>{testsCount} {course.category === 'Prelims' ? 'Classes' : 'Tests'} available</span>
                           <span className="text-[#0a2968] font-black lg:hidden inline-flex items-center gap-0.5">
-                            Open Tests <ChevronRight size={13} />
+                            Open {course.category === 'Prelims' ? 'Classes' : 'Tests'} <ChevronRight size={13} />
                           </span>
                         </div>
                       </div>
@@ -596,7 +605,7 @@ const StudentDashboard = () => {
                       </div>
 
                       <div className="text-[11px] font-semibold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 shrink-0 self-start sm:self-center">
-                        Total: <strong className="text-[#0a2968] font-bold">{getCourseTests(selectedCourse).length} Papers</strong>
+                        Total: <strong className="text-[#0a2968] font-bold">{getCourseTests(selectedCourse).length} {selectedCourse.category === 'Prelims' ? 'Classes' : 'Papers'}</strong>
                       </div>
                     </div>
 
@@ -673,6 +682,20 @@ const StudentDashboard = () => {
 
                   {/* Calculate Course Drip & Unlock Variables */}
                   {(() => {
+                    if (selectedCourse.category === 'Prelims') return (
+                      <div className="space-y-4">
+                        <div className="flex flex-wrap justify-between gap-3"><h3 className="font-bold text-[#163F66]">Your Prelims Classes</h3><span className="text-xs text-slate-500">Paid ₹{Number(selectedCourse.finalPaid || 0).toLocaleString('en-IN')} • {selectedCourse.paperTag}</span></div>
+                        <p className="text-xs text-slate-500">{selectedCourse.timings} • All class times are in IST</p>
+                        <p className="text-xs text-slate-500">Payment ID: {selectedCourse.receiptId} {selectedCourse.purchasedAt && `• Purchased ${new Date(selectedCourse.purchasedAt).toLocaleDateString('en-IN')}`}</p>
+                        {selectedCourse.sessions.length ? selectedCourse.sessions.map((session,i) => <article key={i} className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                          <h4 className="font-bold text-sm text-[#163F66]">{session.title}</h4>
+                          <p className="text-xs text-slate-500">{session.subject} {session.date && `• ${new Date(`${session.date}T12:00:00`).toLocaleDateString('en-IN', {day:'numeric',month:'short',year:'numeric'})}`} {session.time && `• ${session.time} IST`} {session.duration && `• ${session.duration}`}</p>
+                          {session.note && <p className="text-xs text-slate-600">{session.note}</p>}
+                          {safeProgramLink(session.link) ? <a href={session.link} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 bg-[#163F66] text-white rounded-lg text-xs font-bold">Open class <ExternalLink size={13}/></a> : <p className="text-xs text-amber-700">Class link will be published soon.</p>}
+                        </article>) : <p className="text-sm text-slate-500 p-5 bg-slate-50 rounded-xl">Your enrollment is active. Classes and joining links will appear here when published by iTopper.</p>}
+                        <Link to="/programs/prelims" className="inline-flex text-xs font-bold text-blue-700 underline">View full course details</Link>
+                      </div>
+                    );
                     const isDayWiseCourse = !!selectedCourse?.isDayWiseSchedule || selectedCourse?.category === 'Daily Mains';
                     const purchaseDateStr = selectedCourse?.purchasedAt || selectedCourse?.createdAt || Date.now();
                     const purchaseDateObj = new Date(purchaseDateStr);

@@ -419,6 +419,7 @@ const Courses = () => {
   }, [location.search]);
 
   const handleView = (slug) => {
+    if (slug === "mentorship-prelims") { navigate("/programs/prelims"); return; }
     if (slug) {
       if (slug.startsWith("rank-")) {
         navigate("/programs");

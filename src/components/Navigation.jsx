@@ -35,7 +35,7 @@ const Navbar = ({ theme }) => {
       isDropdown: true,
       href: "/#courses?tab=programs",
       subItems: [
-        { name: "Mentorship - Prelims", href: "/#courses?tab=programs" },
+        { name: "Mentorship - Prelims", href: "/programs/prelims" },
         { name: "Mentorship - Mains", href: "/#courses?tab=programs" },
         { name: "Mentorship - Comprehensive (Pre + Mains)", href: "/#courses?tab=programs" }
       ]

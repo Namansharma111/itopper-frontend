@@ -1,4 +1,17 @@
 import { getApiUrl } from '../config/api';
+import axios from 'axios';
+
+// Use the existing auth refresh interceptor for the authenticated Prelims checkout.
+const paymentRequest = async (url, options, authenticated) => {
+  if (!authenticated) return fetch(url, options);
+  try {
+    const { data } = await axios.post(url, JSON.parse(options.body), { headers: { ...options.headers, Authorization: `Bearer ${localStorage.getItem('token') || ''}` } });
+    return { ok: true, json: async () => data };
+  } catch (error) {
+    if (!error.response) throw error;
+    return { ok: false, json: async () => error.response.data };
+  }
+};
 
 export const loadRazorpayScript = () => {
   return new Promise((resolve) => {
@@ -26,6 +39,9 @@ export const checkOrderStatus = async (orderId) => {
 };
 
 export const launchRazorpayCheckout = async ({ item, user, amount, onSuccess, onError, onCancel }) => {
+  const isPrelims = item.category === 'Prelims';
+  const paymentPath = isPrelims ? '/api/payment/prelims' : '/api/payment';
+  const authHeaders = isPrelims ? { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } : {};
   const isScriptLoaded = await loadRazorpayScript();
   if (!isScriptLoaded) {
     alert("Failed to load Razorpay Payment Gateway. Please check your internet connection.");
@@ -38,9 +54,9 @@ export const launchRazorpayCheckout = async ({ item, user, amount, onSuccess, on
   const itemType = item.category || (item.title ? "Evaluation" : "Course");
 
   try {
-    const orderRes = await fetch(getApiUrl('/api/payment/create-order'), {
+    const orderRes = await paymentRequest(getApiUrl(`${paymentPath}/create-order`), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({
         amount: finalPayable,
         currency: "INR",
@@ -59,7 +75,7 @@ export const launchRazorpayCheckout = async ({ item, user, amount, onSuccess, on
           courseId: item._id || item.id
         }
       }),
-    });
+    }, isPrelims);
 
     const orderData = await orderRes.json();
     if (!orderRes.ok || !orderData.orderId) {
@@ -81,9 +97,9 @@ export const launchRazorpayCheckout = async ({ item, user, amount, onSuccess, on
       handler: async function (response) {
         // Asynchronously notify backend of verification
         try {
-          await fetch(getApiUrl('/api/payment/verify'), {
+          const verifyResponse = await paymentRequest(getApiUrl(`${paymentPath}/verify`), {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json", ...authHeaders },
             body: JSON.stringify({
               razorpay_order_id: response.razorpay_order_id,
               razorpay_payment_id: response.razorpay_payment_id,
@@ -96,9 +112,24 @@ export const launchRazorpayCheckout = async ({ item, user, amount, onSuccess, on
               itemName,
               itemType
             }),
-          });
+          }, isPrelims);
+          if (isPrelims) {
+            const verification = await verifyResponse.json();
+            if (!verifyResponse.ok || !verification.success || !verification.enrollment) {
+              throw new Error(verification.message || 'Payment confirmation is pending.');
+            }
+          }
         } catch (err) {
+          if (isPrelims) {
+            if (onError) onError(`${err.message} Keep payment ID ${response.razorpay_payment_id} and contact support before paying again.`);
+            return;
+          }
           console.warn("Background backend verification notification warning:", err);
+        }
+
+        if (isPrelims) {
+          if (onSuccess) onSuccess(response.razorpay_payment_id, orderData.amount / 100);
+          return;
         }
 
         // Always save local purchase enrollment record so user immediately sees plan in dashboard
@@ -137,7 +168,8 @@ export const launchRazorpayCheckout = async ({ item, user, amount, onSuccess, on
       },
       theme: {
         color: "#0a2968"
-      }
+      },
+      ...(isPrelims ? { modal: { ondismiss: () => { if (onCancel) onCancel(); } } } : {})
     };
 
     const razorpayInstance = new window.Razorpay(options);

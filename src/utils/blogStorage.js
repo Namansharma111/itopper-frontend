@@ -42,7 +42,7 @@ export const getBlogs = async () => {
 // Fetch single blog directly from Backend Database API
 export const getBlogById = async (id) => {
   try {
-    const res = await axios.get(`${API_BASE}/${id}`);
+    const res = await axios.get(`${API_BASE}/${encodeURIComponent(id)}`);
     return res.data;
   } catch (err) {
     console.error(`Error fetching blog ${id} from API:`, err);
@@ -73,13 +73,13 @@ export const addBlog = async (blog) => {
 export const updateBlog = async (id, updatedBlog) => {
   let headers = await getAuthHeader();
   try {
-    const res = await axios.put(`${API_BASE}/${id}`, updatedBlog, { headers });
+    const res = await axios.put(`${API_BASE}/${encodeURIComponent(id)}`, updatedBlog, { headers });
     return res.data;
   } catch (err) {
     if (err.response && (err.response.status === 401 || err.response.status === 403)) {
       localStorage.removeItem("token");
       headers = await getAuthHeader();
-      const retryRes = await axios.put(`${API_BASE}/${id}`, updatedBlog, { headers });
+      const retryRes = await axios.put(`${API_BASE}/${encodeURIComponent(id)}`, updatedBlog, { headers });
       return retryRes.data;
     }
     console.error(`Error updating blog ${id} via API:`, err);
@@ -91,13 +91,13 @@ export const updateBlog = async (id, updatedBlog) => {
 export const deleteBlog = async (id) => {
   let headers = await getAuthHeader();
   try {
-    const res = await axios.delete(`${API_BASE}/${id}`, { headers });
+    const res = await axios.delete(`${API_BASE}/${encodeURIComponent(id)}`, { headers });
     return res.data;
   } catch (err) {
     if (err.response && (err.response.status === 401 || err.response.status === 403)) {
       localStorage.removeItem("token");
       headers = await getAuthHeader();
-      const retryRes = await axios.delete(`${API_BASE}/${id}`, { headers });
+      const retryRes = await axios.delete(`${API_BASE}/${encodeURIComponent(id)}`, { headers });
       return retryRes.data;
     }
     console.error(`Error deleting blog ${id} via API:`, err);

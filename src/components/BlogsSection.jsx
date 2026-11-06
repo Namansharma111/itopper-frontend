@@ -1,3 +1,4 @@
+import { blogPath } from "../utils/blogSeo";
 import React, { useState, useEffect } from "react";
 import { ArrowRight, Calendar, Clock } from "lucide-react";
 import { motion } from "framer-motion";
@@ -101,7 +102,7 @@ const BlogsSection = () => {
                       {/* Read Link */}
                       <div className="mt-auto pt-4 border-t border-slate-100">
                         <Link
-                          to={`/blog/${blogId}`}
+                          to={blogPath(blog)}
                           className="inline-flex items-center gap-2 text-sm font-black text-[#163F66] hover:text-[#EF961D] transition-colors duration-300 group/btn"
                         >
                           <span>Read Full Article</span>

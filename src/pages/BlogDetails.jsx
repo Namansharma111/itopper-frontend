@@ -1,4 +1,7 @@
 import React, { useEffect, useState } from "react";
+import { sanitizeArticleHtml } from "../utils/blogContent";
+import { applyBlogMetadata, blogPath } from "../utils/blogSeo";
+import "../styles/blogContent.css";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { ArrowLeft, Calendar, Clock, Share2 } from "lucide-react";
 import { getBlogById } from "../utils/blogStorage";
@@ -12,44 +15,22 @@ const BlogDetails = () => {
   const [blog, setBlog] = useState(null);
 
   useEffect(() => {
-    const fetchBlog = async () => {
-      try {
-        const foundBlog = await getBlogById(id);
-        if (foundBlog) {
-          setBlog(foundBlog);
-          // Dynamic SEO Optimizations
-          document.title = foundBlog.seoTitle || `${foundBlog.title} | iTopper`;
-          
-          // Meta Description Tag
-          let metaDesc = document.querySelector('meta[name="description"]');
-          if (!metaDesc) {
-            metaDesc = document.createElement('meta');
-            metaDesc.setAttribute('name', 'description');
-            document.head.appendChild(metaDesc);
-          }
-          metaDesc.setAttribute('content', foundBlog.excerpt);
-
-          // Meta Keywords Tag
-          if (foundBlog.seoKeywords) {
-            let metaKeywords = document.querySelector('meta[name="keywords"]');
-            if (!metaKeywords) {
-              metaKeywords = document.createElement('meta');
-              metaKeywords.setAttribute('name', 'keywords');
-              document.head.appendChild(metaKeywords);
-            }
-            metaKeywords.setAttribute('content', foundBlog.seoKeywords);
-          }
-        } else {
-          toast.error("Blog post not found.");
-          navigate("/");
-        }
-      } catch (err) {
-        toast.error("Blog post not found.");
-        navigate("/");
-      }
-    };
-    fetchBlog();
+    let active = true;
+    setBlog(null);
+    getBlogById(id).then(foundBlog => {
+      if (!active) return;
+      if (!foundBlog) { toast.error("Blog post not found."); navigate('/blogs', { replace: true }); return; }
+      setBlog(foundBlog);
+      const path = blogPath(foundBlog);
+      if (window.location.pathname !== path) navigate(path, { replace: true });
+    });
+    return () => { active = false; };
   }, [id, navigate]);
+
+  useEffect(() => {
+    if (!blog) return;
+    return applyBlogMetadata(blog);
+  }, [blog]);
 
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
@@ -81,7 +62,7 @@ const BlogDetails = () => {
       <main className="relative pt-32 pb-20 px-4 md:px-6 z-10 flex-grow max-w-4xl mx-auto w-full">
         {/* Back Button */}
         <Link
-          to="/"
+          to="/blogs"
           className="inline-flex items-center gap-2 text-sm font-bold text-[#163F66] hover:text-[#EF961D] transition-colors mb-10 group"
         >
           <ArrowLeft size={16} className="transition-transform group-hover:-translate-x-1" />
@@ -127,38 +108,17 @@ const BlogDetails = () => {
             <div className="relative rounded-3xl overflow-hidden shadow-xl aspect-[21/10] bg-slate-100 border border-slate-100">
               <img
                 src={blog.image}
-                alt={blog.title}
+                alt={blog.imageAlt || blog.title}
                 className="w-full h-full object-cover"
               />
             </div>
           )}
 
           {/* Article Body */}
-          <style>{`
-            .blog-content-body a {
-              color: #2563eb !important;
-              text-decoration: underline !important;
-              font-weight: 700 !important;
-              transition: color 0.2s ease;
-            }
-            .blog-content-body a:hover {
-              color: #EF961D !important;
-            }
-            .blog-content-body h1 { font-size: 2.2rem; font-weight: 800; color: #163F66; margin-top: 1.5rem; margin-bottom: 0.75rem; }
-            .blog-content-body h2 { font-size: 1.8rem; font-weight: 700; color: #163F66; margin-top: 1.25rem; margin-bottom: 0.5rem; }
-            .blog-content-body h3 { font-size: 1.4rem; font-weight: 700; color: #163F66; margin-top: 1rem; margin-bottom: 0.5rem; }
-            .blog-content-body h4 { font-size: 1.2rem; font-weight: 700; color: #163F66; margin-top: 0.8rem; margin-bottom: 0.4rem; }
-            .blog-content-body p { margin-bottom: 1rem; line-height: 1.7; color: #334155; }
-            .blog-content-body ul { list-style-type: disc; padding-left: 1.5rem; margin-bottom: 1rem; color: #334155; }
-            .blog-content-body ol { list-style-type: decimal; padding-left: 1.5rem; margin-bottom: 1rem; color: #334155; }
-            .blog-content-body blockquote { border-left: 4px solid #EF961D; padding-left: 1.25rem; font-style: italic; margin: 1.5rem 0; color: #475569; background-color: #f8fafc; padding-top: 0.75rem; padding-bottom: 0.75rem; border-radius: 0 0.75rem 0.75rem 0; }
-            .blog-content-body pre { background-color: #0f172a; color: #f8fafc; padding: 1.25rem; border-radius: 0.75rem; font-family: monospace; overflow-x: auto; margin-bottom: 1.5rem; }
-            .blog-content-body img { border-radius: 1rem; margin: 1.5rem auto; max-width: 100%; display: block; box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.12); }
-            .blog-content-body hr { border: 0; border-top: 2px solid #e2e8f0; margin: 2rem 0; }
-          `}</style>
+
           <div
-            className="prose prose-slate max-w-none pt-8 pb-12 leading-relaxed text-slate-700 text-lg space-y-6 blog-content-body"
-            dangerouslySetInnerHTML={{ __html: blog.content }}
+            className="blog-article-content pt-8 pb-12"
+            dangerouslySetInnerHTML={{ __html: sanitizeArticleHtml(blog.content) }}
           />
         </article>
       </main>

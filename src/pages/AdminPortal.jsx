@@ -59,13 +59,16 @@ import { getEvaluations, addEvaluation, updateEvaluation, deleteEvaluation, save
 import { getDailyMains, addDailyMains, updateDailyMains, deleteDailyMains } from "../utils/dailyMainsStorage";
 import { uploadFileToCloudinary } from "../utils/uploadStorage";
 import { getApiUrl } from "../config/api";
+import AdminPrelimsProgram from "./AdminPrelimsProgram";
+import BlogRichTextEditor from "../components/admin/BlogRichTextEditor";
+import BlogSeoSettings from "../components/admin/BlogSeoSettings";
+import { emptyBlogSeo, blogSeoValues, normalizeBlogSlug, blogPath } from "../utils/blogSeo";
 
 const AdminPortal = ({ initialTab = "dashboard" }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromQuery = searchParams.get("tab");
   const [activeAdminTab, setActiveAdminTab] = useState(tabFromQuery || initialTab || "dashboard");
 
-  const editorRef = useRef(null);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Authentication State
@@ -95,8 +98,9 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const [blogImage, setBlogImage] = useState("");
   const [blogContent, setBlogContent] = useState("");
   const [blogPublished, setBlogPublished] = useState(true);
-  const [seoTitle, setSeoTitle] = useState("");
-  const [seoKeywords, setSeoKeywords] = useState("");
+  const [blogSeo, setBlogSeo] = useState({ ...emptyBlogSeo });
+  const [blogEditorTab, setBlogEditorTab] = useState('content');
+  const [blogSaveError, setBlogSaveError] = useState('');
   const [isSavingBlog, setIsSavingBlog] = useState(false);
 
   // Evaluation States
@@ -475,7 +479,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
         if (resTxns.ok) {
           const txns = await resTxns.json();
           if (Array.isArray(txns) && txns.length > 0) {
-            dbPurchases = txns.map(t => ({
+            dbPurchases = txns.filter(t => t.itemType !== 'Prelims' || (['VERIFIED', 'PAID'].includes(t.status) && t.fulfillmentStatus === 'FULFILLED')).map(t => ({
               id: t._id || t.orderId || t.paymentId,
               title: t.itemName || 'UPSC Plan',
               category: t.itemType || 'GS',
@@ -483,7 +487,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
               finalPrice: t.amount || 4999,
               studentName: t.studentName || 'Student',
               studentEmail: t.studentEmail || 'student@itopper.com',
-              receiptId: t.receipt || t.paymentId || 'REC-1001',
+              receiptId: t.itemType === 'Prelims' ? t.paymentId || t.receipt : t.receipt || t.paymentId || 'REC-1001',
               purchasedAt: new Date(t.createdAt || Date.now()).toLocaleDateString("en-IN", { day: 'numeric', month: 'short', year: 'numeric' })
             }));
           }
@@ -879,17 +883,13 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
     }
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (showBlogForm && editorRef.current) {
-      editorRef.current.innerHTML = editingBlog ? editingBlog.content : "";
-    }
-  }, [showBlogForm, editingBlog]);
-
-  const executeCommand = (command, value = null) => {
-    document.execCommand(command, false, value);
-    if (editorRef.current) {
-      setBlogContent(editorRef.current.innerHTML);
-    }
+  const openBlogEditor = (blog, tab = 'content') => {
+    setEditingBlog(blog);
+    setBlogTitle(blog.title || ''); setBlogCategory(blog.category || 'Strategy');
+    setBlogReadTime(blog.readTime || '5 min read'); setBlogExcerpt(blog.excerpt || '');
+    setBlogImage(blog.image || ''); setBlogContent(blog.content || '');
+    setBlogPublished(blog.published !== false); setBlogSeo(blogSeoValues(blog));
+    setBlogEditorTab(tab); setBlogSaveError(''); setShowBlogForm(true);
   };
 
   const resetBlogForm = () => {
@@ -900,18 +900,20 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
     setBlogImage("");
     setBlogContent("");
     setBlogPublished(true);
-    setSeoTitle("");
-    setSeoKeywords("");
+    setBlogSeo({ ...emptyBlogSeo });
+    setBlogEditorTab('content');
+    setBlogSaveError('');
     setEditingBlog(null);
-    if (editorRef.current) {
-      editorRef.current.innerHTML = "";
-    }
   };
 
   const handleSaveBlog = async () => {
+    setBlogSaveError('');
     if (!blogTitle.trim() || !blogExcerpt.trim() || !blogContent.trim()) {
-      alert("Please fill in the title, excerpt, and content.");
+      setBlogSaveError("Please fill in the title, excerpt, and article content in the Content tab.");
       return;
+    }
+    if (blogSeo.canonicalUrl && !/^https?:\/\/[^\s]+$/i.test(blogSeo.canonicalUrl.trim())) {
+      setBlogSaveError('Enter a full HTTP or HTTPS canonical URL in the SEO tab, or leave it blank.'); return;
     }
     setIsSavingBlog(true);
     const blogData = {
@@ -922,8 +924,9 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       image: blogImage.trim() || "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&q=80&w=400",
       content: blogContent,
       published: blogPublished,
-      seoTitle: seoTitle.trim() || blogTitle.trim(),
-      seoKeywords: seoKeywords.trim(),
+      ...blogSeo,
+      seoTitle: blogSeo.seoTitle.trim() || blogTitle.trim(),
+      slug: normalizeBlogSlug(blogSeo.slug || editingBlog?.slug || blogTitle.trim()),
     };
 
     try {
@@ -937,6 +940,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
       resetBlogForm();
       fetchBlogs();
     } catch (err) {
+      setBlogSaveError(err.response?.data?.message || 'Unable to save this article. Please try again.');
       console.error("Save article error:", err);
     } finally {
       setIsSavingBlog(false);
@@ -1128,6 +1132,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
   const pendingSubmissionsCount = studentSubmissions.filter(s => s.status === 'Under Evaluation' || !s.status).length;
 
   const navMenuItems = [
+    { id: "prelims", label: "Prelims PLUS Program", icon: Layers },
     {
       id: "dashboard",
       label: "Overview Dashboard",
@@ -1430,6 +1435,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
 
         {/* MAIN BODY AREA */}
         <main className="p-4 sm:p-6 lg:p-8 flex-grow">
+        {activeAdminTab === "prelims" && <AdminPrelimsProgram />}
         {/* ================= TAB 0: DASHBOARD OVERVIEW & ANALYTICS ================= */}
         {activeAdminTab === "dashboard" && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-10">
@@ -1756,6 +1762,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                     <option value="GS">GS Papers</option>
                     <option value="Optional">Optional</option>
                     <option value="Combo">Combo</option>
+                    <option value="Prelims">Prelims PLUS</option>
                   </select>
                 </div>
               </div>
@@ -2521,19 +2528,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                         />
                         <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button
-                            onClick={() => {
-                              setEditingBlog(b);
-                              setBlogTitle(b.title);
-                              setBlogCategory(b.category);
-                              setBlogReadTime(b.readTime);
-                              setBlogExcerpt(b.excerpt);
-                              setBlogImage(b.image);
-                              setBlogContent(b.content);
-                              setBlogPublished(b.published);
-                              setSeoTitle(b.seoTitle || "");
-                              setSeoKeywords(b.seoKeywords || "");
-                              setShowBlogForm(true);
-                            }}
+                            onClick={() => openBlogEditor(b)}
                             className="p-2 bg-white/95 rounded-full text-slate-800 hover:bg-[#0a2968] hover:text-white border border-slate-200 shadow-md cursor-pointer transition-colors"
                             title="Edit Article"
                           >
@@ -2575,7 +2570,8 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                         </div>
                         <div className="pt-4 border-t border-slate-100 flex justify-between items-center text-xs text-slate-400 font-bold">
                           <span>{b.date}</span>
-                          <Link to={`/blog/${b._id || b.id}`} target="_blank" className="text-[#0a2968] hover:text-[#EF961D] font-bold flex items-center gap-1 transition-colors">
+                          <button type="button" onClick={() => openBlogEditor(b, 'seo')} className="px-3 py-1.5 rounded-full bg-blue-50 text-blue-800 hover:bg-blue-100 font-bold">SEO settings</button>
+                          <Link to={blogPath(b)} target="_blank" className="text-[#0a2968] hover:text-[#EF961D] font-bold flex items-center gap-1 transition-colors">
                             View Live <ExternalLink size={12} />
                           </Link>
                         </div>
@@ -3026,7 +3022,11 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
               </button>
             </div>
 
+            <div role="tablist" aria-label="Blog editor sections" className="px-6 pt-4 flex gap-2 border-b border-slate-200 bg-white">
+              {['content', 'seo'].map(tab => <button key={tab} type="button" role="tab" id={`blog-tab-${tab}`} aria-selected={blogEditorTab === tab} aria-controls={`blog-panel-${tab}`} onClick={() => setBlogEditorTab(tab)} className={`px-5 py-3 text-sm font-bold border-b-2 ${blogEditorTab === tab ? 'text-[#163F66] border-[#163F66]' : 'text-slate-400 border-transparent'}`}>{tab === 'content' ? 'Content' : 'SEO settings'}</button>)}
+            </div>
             <div className="p-8 space-y-6 flex-grow">
+              <div role="tabpanel" id="blog-panel-content" aria-labelledby="blog-tab-content" hidden={blogEditorTab !== 'content'}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-2 space-y-6">
                   <div>
@@ -3053,15 +3053,7 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
 
                   <div>
                     <label className="block text-xs font-extrabold text-[#0a2968] uppercase mb-2">Article Body Content</label>
-                    <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm">
-                      <div
-                        ref={editorRef}
-                        contentEditable
-                        onInput={(e) => setBlogContent(e.currentTarget.innerHTML)}
-                        className="min-h-[300px] max-h-[450px] overflow-y-auto p-5 text-slate-800 bg-white font-sans text-base leading-relaxed outline-none"
-                        placeholder="Write article details here..."
-                      />
-                    </div>
+                    <BlogRichTextEditor key={editingBlog?._id || editingBlog?.id || 'new'} content={blogContent} onChange={setBlogContent}/>
                   </div>
                 </div>
 
@@ -3198,15 +3190,17 @@ const AdminPortal = ({ initialTab = "dashboard" }) => {
                     </label>
                   </div>
 
-                  <button
-                    onClick={handleSaveBlog}
-                    disabled={isSavingBlog}
-                    className="w-full py-3.5 bg-[#0a2968] hover:bg-[#EF961D] text-white font-extrabold text-sm rounded-xl transition-all shadow-md cursor-pointer disabled:opacity-50 uppercase tracking-wider"
-                  >
-                    {isSavingBlog ? "Saving Article..." : "Save Article"}
-                  </button>
+
                 </div>
               </div>
+              </div>
+              <div role="tabpanel" id="blog-panel-seo" aria-labelledby="blog-tab-seo" hidden={blogEditorTab !== 'seo'}>
+                <BlogSeoSettings value={blogSeo} onChange={setBlogSeo} title={blogTitle} excerpt={blogExcerpt}/>
+              </div>
+            </div>
+            <div className="sticky bottom-0 border-t border-slate-200 bg-white p-4 sm:px-8 flex flex-wrap items-center justify-between gap-3 z-20">
+              <div className="flex-1 min-w-48">{blogSaveError ? <p role="alert" className="text-red-700 text-sm">{blogSaveError}</p> : <p className="text-xs text-slate-500">Content and SEO settings save together for this article.</p>}</div>
+              <button type="button" onClick={handleSaveBlog} disabled={isSavingBlog || isUploadingCoverImg} className="px-6 py-3 bg-[#163F66] hover:bg-[#0a2968] text-white rounded-xl font-bold text-sm disabled:opacity-50">{isSavingBlog ? 'Saving…' : 'Save Article & SEO'}</button>
             </div>
           </div>
         </div>

@@ -34,6 +34,7 @@ import CourseDetails2 from "./components/CourseDetails2";
 
 // Pages
 import Programs from "./pages/Programs";
+import PrelimsProgram from "./pages/PrelimsProgram";
 import BlogDetails from "./pages/BlogDetails";
 import BlogsPage from "./pages/BlogsPage";
 import AdminBlogsDashboard from "./pages/AdminBlogsDashboard";
@@ -86,7 +87,7 @@ function App() {
   const isProgramsPage = location.pathname === "/programs";
   const isLightModePage =
     isLandingPage ||
-    isProgramsPage ||
+    isProgramsPage || location.pathname === "/programs/prelims" ||
     location.pathname === "/login" ||
     location.pathname === "/register" ||
     location.pathname === "/forgot-password" ||
@@ -153,6 +154,7 @@ function App() {
             />
 
             <Route path="/programs" element={<Programs />} />
+            <Route path="/programs/prelims" element={<PrelimsProgram />} />
             <Route path="/blogs" element={<BlogsPage />} />
             <Route path="/evaluation" element={<EvaluationPage />} />
             <Route path="/daily-mains-writing" element={<DailyMainsPage />} />

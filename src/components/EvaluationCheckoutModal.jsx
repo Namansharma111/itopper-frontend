@@ -22,7 +22,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
 
   // Modal Step State: 'auth' | 'checkout' | 'processing'
   const [step, setStep] = useState("auth");
-  const [authMode, setAuthMode] = useState("login"); // 'login' | 'register'
+  const [authMode, setAuthMode] = useState(plan?.category === 'Prelims' ? 'register' : 'login'); // 'login' | 'register'
 
   // Auth Form State
   const [authEmail, setAuthEmail] = useState("");
@@ -36,7 +36,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
       if (!user) {
         setStep("auth");
       } else {
-        setStep("checkout");
+        setStep(previous => plan?.category === 'Prelims' && previous === 'processing' ? previous : 'checkout');
       }
       setAuthError("");
     }
@@ -48,6 +48,12 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
 
   // Function to save purchase and redirect immediately to Payment Success page
   const handleSuccess = async (txnid, pricePaid) => {
+    if (plan.category === 'Prelims') {
+      if (onPaymentSuccess) onPaymentSuccess(txnid);
+      onClose();
+      navigate(`/payment-success?txnid=${encodeURIComponent(txnid)}`);
+      return;
+    }
     try {
       const currentUser = user || { email: authEmail };
       const userEmail = currentUser?.email;
@@ -112,6 +118,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
         handleSuccess(paymentId, paidAmount);
       },
       onError: (err) => {
+        if (plan.category === 'Prelims') setAuthError(String(err || 'Unable to open payment. Please try again.'));
         setStep(activeUser || user ? "checkout" : "auth");
       },
       onCancel: () => {
@@ -327,7 +334,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
               </form>
 
               {/* Fast 1-Click Guest Login button (Only visible on localhost / local dev) */}
-              {isLocal && (
+              {isLocal && plan.category !== 'Prelims' && (
                 <div className="mt-5 pt-4 border-t border-slate-100 text-center">
                   <button
                     onClick={handleQuickDemoLogin}
@@ -343,6 +350,7 @@ const EvaluationCheckoutModal = ({ isOpen, onClose, plan, onPaymentSuccess }) =>
           {/* ================= STEP 2: CHECKOUT STEP ================= */}
           {step === "checkout" && (
             <div className="animate-in fade-in duration-300 space-y-5">
+              {authError && <p role="alert" className="text-sm text-red-700 bg-red-50 rounded-xl p-3">{authError}</p>}
               <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4">
                 <div className="flex justify-between items-start mb-2">
                   <div>
