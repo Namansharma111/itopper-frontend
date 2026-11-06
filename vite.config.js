@@ -10,23 +10,8 @@ export default defineConfig({
   ],
   build: {
     chunkSizeWarningLimit: 1600,
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('node_modules')) {
-            if (id.includes('lucide-react') || id.includes('react-icons')) {
-              return 'vendor-icons';
-            }
-            if (id.includes('framer-motion') || id.includes('motion')) {
-              return 'vendor-motion';
-            }
-            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
-              return 'vendor-core';
-            }
-            return 'vendor-libs';
-          }
-        },
-      },
-    },
+    // Let Rollup preserve dependency initialization order. Splitting packages by
+    // substrings such as "react" also captures @tiptap/react and creates cycles
+    // between the React runtime, its scheduler and other vendor dependencies.
   },
 });
