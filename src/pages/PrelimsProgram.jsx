@@ -52,11 +52,52 @@ export default function PrelimsProgram() {
       {error && <p role="status" className="pp-notice">{error}</p>}
       {paymentError && <p role="alert" className="pp-notice">{paymentError} <a href="/my-courses" className="underline">Open My Courses</a></p>}
       <section id="overview" className="pp-hero">
-        <div className="pp-poster">{safeProgramLink(program.image) ? <img src={program.image} alt={program.title}/> : <><img className="pp-poster-logo" src="/images/itopper.png" alt="iTopper Academy"/><span>PRELIMS PLUS</span><b>2027</b><p>Every PYQ Has a Lesson</p><div>150 CLASSES • HYBRID</div><small>WITH {program.facultyName.toUpperCase()}</small></>}</div>
-        <div className="pp-hero-content"><span className="pp-badge">UPSC CSE • {program.format}</span><h2>{program.title}</h2><p className="pp-tagline">{program.tagline}</p><p>{program.description}</p><div className="pp-facts"><span><CalendarDays size={16}/>{dateLabel(program.startDate)}</span><span><Clock size={16}/>{program.timings}</span><span><BookOpen size={16}/>{program.totalClasses} classes</span></div><div className="pp-batches"><button className={batch === 'online' ? 'selected' : ''} onClick={() => setBatch('online')}>Online batch</button><button className={batch === 'offline' ? 'selected' : ''} onClick={() => setBatch('offline')}>Offline • ORN Center</button></div><div className="pp-price"><strong>{money(price)}</strong><del>{money(mrp)}</del>{mrp > price && <span>Save {Math.round((1-price/mrp)*100)}%</span>}</div><div className="pp-actions"><button type="button" className="pp-button" onClick={subscribe} disabled={paying}>{paying ? "Opening payment…" : "Subscribe now"} <ArrowUpRight size={16}/></button>{safeProgramLink(program.brochure) && <a className="pp-outline" href={program.brochure} target="_blank" rel="noopener noreferrer"><Download size={16}/> Download brochure</a>}</div></div>
+        {safeProgramLink(program.image) ? (
+          <div className="pp-cover">
+            <img src={program.image} alt={program.title} />
+          </div>
+        ) : (
+          <div className="pp-poster">
+            <img className="pp-poster-logo" src="/images/itopper.png" alt="iTopper Academy" />
+            <span>PRELIMS PLUS</span>
+            <b>2027</b>
+            <p>Every PYQ Has a Lesson</p>
+            <div>{program.totalClasses} CLASSES • {program.format.toUpperCase()}</div>
+            <small>WITH {program.facultyName.toUpperCase()}</small>
+          </div>
+        )}
+        <div className="pp-hero-content">
+          <span className="pp-badge">UPSC CSE • {program.format}</span>
+          <h2>{program.title}</h2>
+          <p className="pp-tagline">{program.tagline}</p>
+          <p>{program.description}</p>
+          <div className="pp-facts">
+            <span><CalendarDays size={16}/>{dateLabel(program.startDate)}</span>
+            <span><Clock size={16}/>{program.timings}</span>
+            <span><BookOpen size={16}/>{program.totalClasses} classes</span>
+          </div>
+          <div className="pp-batches" role="group" aria-label="Choose a batch">
+            <button type="button" aria-pressed={batch === 'online'} className={batch === 'online' ? 'selected' : ''} onClick={() => setBatch('online')}>Online batch</button>
+            <button type="button" aria-pressed={batch === 'offline'} className={batch === 'offline' ? 'selected' : ''} onClick={() => setBatch('offline')}>Offline • ORN Center</button>
+          </div>
+          <div className="pp-actions pp-hero-actions">
+            <div className="pp-price">
+              <strong>{money(price)}</strong>
+              <del>{money(mrp)}</del>
+              {mrp > price && <span>Save {Math.round((1-price/mrp)*100)}%</span>}
+            </div>
+            <button type="button" className="pp-button" onClick={subscribe} disabled={paying}>
+              {paying ? 'Opening payment…' : 'Subscribe now'} <ArrowUpRight size={16}/>
+            </button>
+            {safeProgramLink(program.brochure) && (
+              <a className="pp-outline" href={program.brochure} target="_blank" rel="noopener noreferrer">
+                <Download size={16}/> Download brochure
+              </a>
+            )}
+          </div>
+        </div>
       </section>
       <section><h2 className="pp-section-title">The iTopper <span>Advantage</span></h2><div className="pp-advantages">{program.features.map((feature,i) => <details key={i} className={i%2 ? 'warm' : ''} open={i === 0}><summary><CheckCircle2 size={21}/>{feature.split(':')[0]}<span>+</span></summary><p>{feature.includes(':') ? feature.slice(feature.indexOf(':')+1).trim() : feature}</p></details>)}</div></section>
-      <section className="pp-framework"><p className="pp-eyebrow">CORE METHODOLOGY</p><h2>One theme. Two steps to mastery.</h2><div className="pp-two"><article><span>01 / PYQs ASKED</span><h3>Understand the examiner’s thinking</h3><p>Deconstruct past question patterns, examiner traps and repeated conceptual threads.</p></article><article><span>02 / PROBABLE QUESTIONS</span><h3>Apply the concept to what comes next</h3><p>Practice forward-looking probable questions from the same theme across key UPSC formats.</p></article></div><div className="pp-chips">{program.questionTypes.map(t => <span key={t}>{t}</span>)}</div></section>
       <section id="schedule"><h2 className="pp-section-title">Day Wise Class Schedule</h2><p className="pp-muted">{program.timings} • All class times are in IST</p>{dates.length > 0 && <div className="pp-days"><button className={!day ? 'selected' : ''} onClick={() => setDay('')}>All dates</button>{dates.map(d => <button key={d} className={day === d ? 'selected' : ''} onClick={() => setDay(d)}>{dateLabel(d)}</button>)}</div>}{sessions.filter(s => !day || s.date === day).length ? sessions.filter(s => !day || s.date === day).map((s,i) => <Resource key={i} session={s}/>) : <div className="pp-empty"><CalendarDays/><div><strong>Classes begin {dateLabel(program.startDate)}</strong><p>The detailed class schedule and joining links will appear here when published.</p></div></div>}</section>
       <section id="curriculum"><h2 className="pp-section-title">Course Curriculum</h2><div className="pp-curriculum"><aside>{['All classes', ...new Set([...program.subjects, ...sessions.map(s => s.subject).filter(Boolean)])].map(s => <button key={s} className={subject === s ? 'selected' : ''} onClick={() => setSubject(s)}>{s}</button>)}</aside><div><h3>{subject === 'All classes' ? 'Theme-wise learning & PYQ discussion' : subject}</h3><p className="pp-muted">Concise thematic workbooks • Past 10 years’ PYQs • Probable questions</p>{sessions.filter(s => subject === 'All classes' || s.subject === subject).map((s,i) => <Resource key={i} session={s}/>)}{!sessions.some(s => subject === 'All classes' || s.subject === subject) && <div className="pp-empty"><BookOpen/><p>Theme-wise sessions will be published here. Explore the brochure for the course methodology.</p></div>}</div></div></section>
       <section className="pp-banner"><GraduationCap size={38}/><p className="pp-eyebrow">SKILL-FIRST PROBLEM SOLVING</p><h2>Learn the logic behind every answer.</h2><p>Concepts, patterns and practice — brought together in {program.totalClasses} interactive classes.</p><button type="button" className="pp-button" onClick={subscribe} disabled={paying}>Join {program.title} <ArrowUpRight size={16}/></button></section>
